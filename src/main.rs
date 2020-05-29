@@ -1,6 +1,6 @@
 use std::{fmt, result, error};
 use std::io;
-use std::fmt::Error;
+use std::fmt::{Error, Display, Formatter};
 use std::borrow::BorrowMut;
 
 const PROMPT: &str = ">> ";
@@ -55,6 +55,23 @@ pub struct LetStatement {
 	value: Expression,
 }
 
+impl fmt::Display for LetStatement {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "let {} = {};", self.name, self.value)
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReturnStatement {
+	value: Expression,
+}
+
+impl fmt::Display for ReturnStatement {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "return {};", self.value)
+	}
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
 	INCOMPLETE,
@@ -63,7 +80,9 @@ pub enum Statement {
 	LET(LetStatement),
 
 	//value => x + y
-	EXP(Expression)
+	EXP(Expression),
+
+	RETURN(ReturnStatement)
 }
 
 pub struct Program {
@@ -107,13 +126,10 @@ impl fmt::Display for Program {
 impl fmt::Display for Statement {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Statement::INCOMPLETE => write!(f, "INCOMPLETE"),
-			Statement::LET(s) => {
-				write!(f, "let {} = {};", s.name, s.value)
-			},
-			Statement::EXP(exp) => {
-				write!(f, "{}", exp)
-			}
+			Statement::INCOMPLETE => write!(f, "incomplete"),
+			Statement::LET(stmt) => stmt.fmt(f),
+			Statement::EXP(stmt) => stmt.fmt(f),
+			Statement::RETURN(stmt) => stmt.fmt(f),
 		}
 	}
 }
@@ -132,30 +148,40 @@ let k = 32;
 let a = 34;
 let n = 35;"#;
 
-	let actual = Parser::new(Lexer::new(input.to_owned())).parse().unwrap();
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 	let expecteds = vec![
-		Statement::LET(LetStatement{name: String::from("f"), value: Expression::IDENT(String::from("TODO"))}),
-		Statement::LET(LetStatement{name: String::from("u"), value: Expression::IDENT(String::from("TODO"))}),
-		Statement::LET(LetStatement{name: String::from("r"), value: Expression::IDENT(String::from("TODO"))}),
-		Statement::LET(LetStatement{name: String::from("k"), value: Expression::IDENT(String::from("TODO"))}),
-		Statement::LET(LetStatement{name: String::from("a"), value: Expression::IDENT(String::from("TODO"))}),
-		Statement::LET(LetStatement{name: String::from("n"), value: Expression::IDENT(String::from("TODO"))}),
+		Statement::LET(LetStatement{name: String::from("f"), value: Expression::IDENT(String::from("TODO::LET"))}),
+		Statement::LET(LetStatement{name: String::from("u"), value: Expression::IDENT(String::from("TODO::LET"))}),
+		Statement::LET(LetStatement{name: String::from("r"), value: Expression::IDENT(String::from("TODO::LET"))}),
+		Statement::LET(LetStatement{name: String::from("k"), value: Expression::IDENT(String::from("TODO::LET"))}),
+		Statement::LET(LetStatement{name: String::from("a"), value: Expression::IDENT(String::from("TODO::LET"))}),
+		Statement::LET(LetStatement{name: String::from("n"), value: Expression::IDENT(String::from("TODO::LET"))}),
 	];
 
+	assert_eq!(errs.len(), 0);
 	assert_eq!(actual.statements.len(), 6);
 	assert_eq!(actual.statements, expecteds);
-
-
-
 }
 
-fn parse(input: &str) -> Program {
-	let l = Lexer::new(input.to_owned());
+#[test]
+fn test_parse_statement_return() {
+	let input = r#"
+return 15;
+return 34;
+return 707707;"#;
 
-	let mut p = Parser::new(l);
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
-	return p.parse().unwrap()
+	let expecteds = vec![
+		Statement::RETURN(ReturnStatement{ value: Expression::IDENT(String::from("TODO::RETURN"))}),
+		Statement::RETURN(ReturnStatement{ value: Expression::IDENT(String::from("TODO::RETURN"))}),
+		Statement::RETURN(ReturnStatement{ value: Expression::IDENT(String::from("TODO::RETURN"))}),
+	];
+
+	assert_eq!(errs.len(), 0);
+	assert_eq!(actual.statements.len(), 3);
+	assert_eq!(actual.statements, expecteds);
 }
 
 //pub type Result<T> = result::Result<T, ParserErrorType>;
@@ -234,21 +260,23 @@ impl Parser {
 	}
 
 	//TODO: vec err arr
-	fn parse(&mut self) -> Result<Program, ParserError> {
+	fn parse(&mut self) -> (Program, Vec<ParserError>) {
 		let mut program = Program::new();
+		let mut errs = Vec::new();
 		while self.curr_token != Token::EOF {
 			match self.parse_statement() {
 				Ok(s) => program.statements.push(s),
-				Err(e) => return Err(e)
+				Err(e) => errs.push(e),
 			}
 			self.next_token();
 		}
-		Ok(program)
+		(program, errs)
 	}
 
 	fn parse_statement(&mut self) -> Result<Statement, ParserError> {
 		match self.curr_token {
 			Token::LET => self.parse_statement_let(),
+			Token::RETURN => self.parse_statement_return(),
 			_ => Ok(Statement::INCOMPLETE),
 			//_ => Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone())),
 		}
@@ -273,7 +301,18 @@ impl Parser {
 			self.next_token();
 		}
 
-		Ok(Statement::LET(LetStatement{name: ident.clone(), value: Expression::IDENT(String::from("TODO"))}))
+		Ok(Statement::LET(LetStatement{name: ident.clone(), value: Expression::IDENT(String::from("TODO::LET"))}))
+	}
+
+	fn parse_statement_return(&mut self) -> Result<Statement, ParserError> {
+		self.next_token();
+
+		//TODO: We're skipping the expressions until we encounter a semicolon
+		while !self.curr_token_is(Token::SEMICOLON) {
+			self.next_token();
+		}
+
+		Ok(Statement::RETURN(ReturnStatement{value: Expression::IDENT(String::from("TODO::RETURN"))}))
 	}
 }
 
