@@ -2,6 +2,7 @@ use std::{fmt, result, error};
 use std::io;
 use std::fmt::{Error, Display, Formatter};
 use std::borrow::BorrowMut;
+use std::path::Component::Prefix;
 
 const PROMPT: &str = ">> ";
 
@@ -46,7 +47,36 @@ pub enum Literal {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
 	IDENT(String),
-	LITERAL(Literal)
+	LITERAL(Literal),
+
+	PREFIX(PrefixExpression),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PrefixType {
+	BANG,
+	MINUS,
+}
+
+impl fmt::Display for PrefixType {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		match self {
+			PrefixType::BANG => write!(f, "!"),
+			PrefixType::MINUS => write!(f, "-")
+		}
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrefixExpression {
+	operator: PrefixType,
+	right: Box<Expression>,
+}
+
+impl fmt::Display for PrefixExpression {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "({}{})", self.operator, self.right)
+	}
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -227,6 +257,20 @@ fn test_parse_statement_expression_integer() {
 	assert_eq!(actual.statements, expecteds);
 }
 
+#[test]
+fn test_parse_statement_expression_prefix() {
+	let input = "!7;-15;";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::INT(7)))})),
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::MINUS, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
 type ParserPrefixFunc = fn(&mut Parser) -> Result<Expression, ParserError>;
 
 pub struct Parser {
@@ -244,6 +288,7 @@ pub enum ParserError {
 	NO_IDENT(Token),
 	UNEXPECTED_STATEMENT_TOKEN(Token),
 	UNEXPECTED_PREFIX_FUNC(Token),
+	UNEXPECTED_PREFIX_TYPE(Token),
 }
 
 impl fmt::Display for ParserError {
@@ -260,6 +305,7 @@ impl fmt::Display for ParserError {
 			ParserError::NO_IDENT(t) => write!(f, "no ident: {}", t),
 			ParserError::UNEXPECTED_STATEMENT_TOKEN(t) => write!(f, "unexpected statement token: {}", t),
 			ParserError::UNEXPECTED_PREFIX_FUNC(t) => write!(f, "unexpected prefix func for: {}", t),
+			ParserError::UNEXPECTED_PREFIX_TYPE(t) => write!(f, "unexpected prefix type for token: {}", t),
 
 		}
 	}
@@ -343,8 +389,6 @@ impl Parser {
 			Token::LET => self.parse_statement_let(),
 			Token::RETURN => self.parse_statement_return(),
 			_ => self.parse_statement_expression(),
-			//_ => Ok(Statement::INCOMPLETE),
-			//_ => Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone())),
 		}
 	}
 
@@ -415,6 +459,7 @@ impl Parser {
 		let prefix = match &self.curr_token {
 			Token::IDENT(_) => Parser::parse_statement_identifier,
 			Token::INT(_) => Parser::parse_literal_integer,
+			Token::BANG | Token::MINUS => Parser::parse_expression_prefix,
 			_ => return None
 		};
 
@@ -424,6 +469,21 @@ impl Parser {
 	fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ParserError> {
 		let prefix = self.parse_prefix().ok_or_else(|| ParserError::UNEXPECTED_PREFIX_FUNC(self.curr_token.clone()))?;
 		Ok(prefix(self)?)
+	}
+
+	fn parse_expression_prefix(&mut self) -> Result<Expression, ParserError> {
+		let prefix_type = match self.curr_token {
+			Token::BANG => PrefixType::BANG,
+			Token::MINUS => PrefixType::MINUS,
+			_ => return Err(ParserError::UNEXPECTED_PREFIX_TYPE(self.curr_token.clone()))
+		};
+
+		self.next_token();
+
+		match self.parse_expression(Precedence::PREFIX) {
+			Ok(expr) => Ok(Expression::PREFIX(PrefixExpression{operator: prefix_type, right: Box::new(expr)})),
+			Err(e) => Err(e),
+		}
 	}
 }
 
