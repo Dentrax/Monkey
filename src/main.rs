@@ -42,6 +42,15 @@ pub enum Literal {
 	STRING(String),
 }
 
+impl fmt::Display for Literal {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		match self {
+			Literal::INT(i) => write!(f, "{}", i),
+			Literal::STRING(s) => write!(f, "{}", s)
+		}
+	}
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
 	IDENT(String),
@@ -179,7 +188,9 @@ impl fmt::Display for Expression {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			Expression::IDENT(i) => write!(f, "{}", i),
-			_ => write!(f, "handle me")
+			Expression::LITERAL(i) => write!(f, "{}", i),
+			Expression::PREFIX(i) => write!(f, "{}", i),
+			Expression::INFIX(i) => write!(f, "{}", i),
 		}
 	}
 }
@@ -221,6 +232,70 @@ fn test_ast_string() {
 //=== AST END ====
 
 //=== PARSER BEGIN ===
+
+#[test]
+fn test_ast_operator_precedence_string() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: &'a str,
+	}
+
+	let tests = vec![
+		Test {
+			input: "-a * b",
+			expected: "((-a) * b)"
+		},
+		Test {
+			input: "!-a",
+			expected: "(!(-a))"
+		},
+		Test {
+			input: "a + b + c",
+			expected: "((a + b) + c)"
+		},
+		Test {
+			input: "a + b - c",
+			expected: "((a + b) - c)",
+		},
+		Test {
+			input: "a * b * c",
+			expected: "((a * b) * c)"
+		},
+		Test {
+			input: "a * b / c",
+			expected: "((a * b) / c)"
+		},
+		Test {
+			input: "a + b / c",
+			expected: "(a + (b / c))"
+		},
+		Test {
+			input: "a + b * c + d / e - f",
+			expected: "(((a + (b * c)) + (d / e)) - f)",
+		},
+		Test {
+			input: "3 + 4; -5 * 5",
+			expected: "(3 + 4)((-5) * 5)"
+		},
+		Test {
+			input: "5 > 4 == 3 < 4",
+			expected: "((5 > 4) == (3 < 4))"
+		},
+		Test {
+			input: "5 < 4 != 3 > 4",
+			expected: "((5 < 4) != (3 > 4))"
+		},
+		Test {
+			input: "3 + 4 * 5 == 3 * 1 + 4 * 5",
+			expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+		},
+	];
+
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		assert_eq!(actual.to_string(), test.expected);
+	}
+}
 
 #[test]
 fn test_parse_statement_let() {
@@ -401,13 +476,12 @@ enum Precedence {
 
 fn get_precedence_for_token_type(token: &Token) -> Precedence {
 	match token {
-		Token::PLUS => Precedence::EQUALS,
+		Token::PLUS => Precedence::SUM,
+		Token::MINUS => Precedence::SUM,
 		Token::EQ => Precedence::EQUALS,
 		Token::NEQ => Precedence::EQUALS,
 		Token::LT => Precedence::LESSGREATER,
 		Token::GT => Precedence::LESSGREATER,
-		Token::PLUS => Precedence::SUM,
-		Token::MINUS => Precedence::SUM,
 		Token::SLASH => Precedence::PRODUCT,
 		Token::ASTERISK => Precedence::PRODUCT,
 		_ => Precedence::LOWEST,
@@ -571,7 +645,7 @@ impl Parser {
 		})
 	}
 
-	// Hearth of our Pratt parser
+	// Hearth of our Vaughan Pratt parser - “Top Down Operator Precedence”
 	fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ParserError> {
 		let prefix = self.parse_prefix().ok_or_else(|| ParserError::UNEXPECTED_PREFIX_FUNC(self.curr_token.clone()))?;
 		let mut left_exp = prefix(self)?;
