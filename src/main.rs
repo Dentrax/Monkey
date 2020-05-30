@@ -80,7 +80,7 @@ pub enum Statement {
 	LET(LetStatement),
 
 	//value => x + y
-	EXP(Expression),
+	EXPRESSION(Expression),
 
 	RETURN(ReturnStatement)
 }
@@ -128,7 +128,7 @@ impl fmt::Display for Statement {
 		match self {
 			Statement::INCOMPLETE => write!(f, "incomplete"),
 			Statement::LET(stmt) => stmt.fmt(f),
-			Statement::EXP(stmt) => stmt.fmt(f),
+			Statement::EXPRESSION(stmt) => stmt.fmt(f),
 			Statement::RETURN(stmt) => stmt.fmt(f),
 		}
 	}
@@ -198,6 +198,21 @@ return 707707;"#;
 	assert_eq!(actual.statements, expecteds);
 }
 
+#[test]
+fn test_parse_statement_expression() {
+	let input = "foobar;";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(Expression::IDENT(String::from("foobar"))),
+	];
+
+	assert_eq!(errs.len(), 0);
+	//assert_eq!(actual.statements.len(), 1);
+	assert_eq!(actual.statements, expecteds);
+}
+
 //pub type Result<T> = result::Result<T, ParserErrorType>;
 
 pub struct Parser {
@@ -230,6 +245,24 @@ impl fmt::Display for ParserError {
 
 		}
 	}
+}
+
+
+enum Precedence {
+	//
+	LOWEST,
+	// ==
+	EQUALS,
+	// <>
+	LESSGREATER,
+	// +
+	SUM,
+	// *
+	PRODUCT,
+	//-X or !X
+	PREFIX,
+	// func(X)
+	CALL,
 }
 
 impl Default for Parser {
@@ -291,7 +324,8 @@ impl Parser {
 		match self.curr_token {
 			Token::LET => self.parse_statement_let(),
 			Token::RETURN => self.parse_statement_return(),
-			_ => Ok(Statement::INCOMPLETE),
+			_ => self.parse_statement_expression(),
+			//_ => Ok(Statement::INCOMPLETE),
 			//_ => Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone())),
 		}
 	}
@@ -327,6 +361,30 @@ impl Parser {
 		}
 
 		Ok(Statement::RETURN(ReturnStatement{value: Expression::IDENT(String::from("TODO::RETURN"))}))
+	}
+
+	fn parse_statement_expression(&mut self) -> Result<Statement, ParserError> {
+		let expr = self.parse_expression(Precedence::LOWEST)?;
+
+		if self.peek_token_is(Token::SEMICOLON) {
+			self.next_token();
+		}
+
+		Ok(Statement::EXPRESSION(expr))
+	}
+
+
+	fn parse_statement_identifier(&mut self) -> Result<Expression, ParserError> {
+		match self.read_identifier() {
+			Ok(ident) => Ok(Expression::IDENT(ident)),
+			Err(err) => Err(err),
+		}
+	}
+
+
+	fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ParserError> {
+		let ident = self.parse_statement_identifier()?;
+		Ok(Expression::IDENT(ident.to_string()))
 	}
 }
 
