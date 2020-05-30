@@ -173,8 +173,6 @@ let n = 35;"#;
 		Statement::LET(LetStatement{name: String::from("n"), value: Expression::IDENT(String::from("TODO::LET"))}),
 	];
 
-	assert_eq!(errs.len(), 0);
-	assert_eq!(actual.statements.len(), 6);
 	assert_eq!(actual.statements, expecteds);
 }
 
@@ -193,27 +191,43 @@ return 707707;"#;
 		Statement::RETURN(ReturnStatement{ value: Expression::IDENT(String::from("TODO::RETURN"))}),
 	];
 
-	assert_eq!(errs.len(), 0);
-	assert_eq!(actual.statements.len(), 3);
 	assert_eq!(actual.statements, expecteds);
 }
 
 #[test]
 fn test_parse_statement_expression() {
-	let input = "foobar;";
+	let input = "f;u;r;k;a;n;";
 
 	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 	let expecteds = vec![
-		Statement::EXPRESSION(Expression::IDENT(String::from("foobar"))),
+		Statement::EXPRESSION(Expression::IDENT(String::from("f"))),
+		Statement::EXPRESSION(Expression::IDENT(String::from("u"))),
+		Statement::EXPRESSION(Expression::IDENT(String::from("r"))),
+		Statement::EXPRESSION(Expression::IDENT(String::from("k"))),
+		Statement::EXPRESSION(Expression::IDENT(String::from("a"))),
+		Statement::EXPRESSION(Expression::IDENT(String::from("n"))),
 	];
 
-	assert_eq!(errs.len(), 0);
-	//assert_eq!(actual.statements.len(), 1);
 	assert_eq!(actual.statements, expecteds);
 }
 
-//pub type Result<T> = result::Result<T, ParserErrorType>;
+#[test]
+fn test_parse_statement_expression_integer() {
+	let input = "7;15;34;";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(Expression::LITERAL(Literal::INT(7))),
+		Statement::EXPRESSION(Expression::LITERAL(Literal::INT(15))),
+		Statement::EXPRESSION(Expression::LITERAL(Literal::INT(34))),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
+type ParserPrefixFunc = fn(&mut Parser) -> Result<Expression, ParserError>;
 
 pub struct Parser {
 	lexer: Lexer,
@@ -225,9 +239,11 @@ pub struct Parser {
 pub enum ParserError {
 	TODO,
 	INVALID_TOKEN(Token),
+	INVALID_LITERAL(String),
 	UNEXPECTED_TOKEN{want: String, got: String},
 	NO_IDENT(Token),
 	UNEXPECTED_STATEMENT_TOKEN(Token),
+	UNEXPECTED_PREFIX_FUNC(Token),
 }
 
 impl fmt::Display for ParserError {
@@ -235,6 +251,7 @@ impl fmt::Display for ParserError {
 		match self {
 			ParserError::TODO => write!(f, "todo"),
 			ParserError::INVALID_TOKEN(t) => write!(f, "invalid token: {}", t),
+			ParserError::INVALID_LITERAL(t) => write!(f, "invalid literal: {}", t),
 			ParserError::UNEXPECTED_TOKEN { want, got } => write!(
 				f,
 				"parser found unexpected token: {}, expected: {}",
@@ -242,6 +259,7 @@ impl fmt::Display for ParserError {
 			),
 			ParserError::NO_IDENT(t) => write!(f, "no ident: {}", t),
 			ParserError::UNEXPECTED_STATEMENT_TOKEN(t) => write!(f, "unexpected statement token: {}", t),
+			ParserError::UNEXPECTED_PREFIX_FUNC(t) => write!(f, "unexpected prefix func for: {}", t),
 
 		}
 	}
@@ -337,6 +355,18 @@ impl Parser {
 		}
 	}
 
+
+	//TODO: Token::INT(String)?
+	fn parse_literal_integer(&mut self) -> Result<Expression, ParserError> {
+		match self.curr_token {
+			Token::INT(i) => {
+				Ok(Expression::LITERAL(Literal::INT(i)))
+			}
+			_ => Err(ParserError::INVALID_TOKEN(self.curr_token.clone()))
+		}
+	}
+
+
 	fn parse_statement_let(&mut self) -> Result<Statement, ParserError> {
 		self.next_token();
 
@@ -381,10 +411,19 @@ impl Parser {
 		}
 	}
 
+	fn parse_prefix(&self) -> Option<ParserPrefixFunc> {
+		let prefix = match &self.curr_token {
+			Token::IDENT(_) => Parser::parse_statement_identifier,
+			Token::INT(_) => Parser::parse_literal_integer,
+			_ => return None
+		};
+
+		Some(prefix)
+	}
 
 	fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ParserError> {
-		let ident = self.parse_statement_identifier()?;
-		Ok(Expression::IDENT(ident.to_string()))
+		let prefix = self.parse_prefix().ok_or_else(|| ParserError::UNEXPECTED_PREFIX_FUNC(self.curr_token.clone()))?;
+		Ok(prefix(self)?)
 	}
 }
 
@@ -629,7 +668,7 @@ impl Lexer {
 					return to;
 				} else if Lexer::is_digit(self.ch) {
 					let id = self.read_number();
-					return Token::INT(id.parse().unwrap());
+					return Token::INT(id.parse::<usize>().unwrap()); //TODO: match ret err?
 				}
 				t = Token::ILLEGAL(self.ch);
 			}
