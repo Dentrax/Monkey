@@ -134,6 +134,20 @@ impl fmt::Display for Statement {
 	}
 }
 
+#[test]
+fn test_ast_string() {
+	let program = Program {
+		statements: vec![
+			Statement::LET(LetStatement{name: String::from("country"), value: Expression::IDENT(String::from("istanbul"))}),
+			Statement::LET(LetStatement{name: String::from("neighborhood"), value: Expression::IDENT(String::from("maslak"))})
+		]
+	};
+
+	let expected = "let country = istanbul;let neighborhood = maslak;";
+
+	assert_eq!(program.to_string(), expected);
+}
+
 //=== AST END ====
 
 //=== PARSER BEGIN ===
