@@ -1,8 +1,6 @@
-use std::{fmt, result, error};
+use std::{fmt};
 use std::io;
-use std::fmt::{Error, Display, Formatter};
-use std::borrow::BorrowMut;
-use std::path::Component::Prefix;
+use std::fmt::{Error, Formatter};
 
 const PROMPT: &str = ">> ";
 
@@ -50,6 +48,7 @@ pub enum Expression {
 	LITERAL(Literal),
 
 	PREFIX(PrefixExpression),
+	INFIX(InfixExpression),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -76,6 +75,47 @@ pub struct PrefixExpression {
 impl fmt::Display for PrefixExpression {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		write!(f, "({}{})", self.operator, self.right)
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InfixType {
+	PLUS,
+	MINUS,
+	DIVISION,
+	MULTIPLICATION,
+	LT,
+	GT,
+	EQ,
+	NEQ,
+
+}
+
+impl fmt::Display for InfixType {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		match self {
+			InfixType::PLUS => write!(f, "+"),
+			InfixType::MINUS => write!(f, "-"),
+			InfixType::DIVISION => write!(f, "/"),
+			InfixType::MULTIPLICATION => write!(f, "*"),
+			InfixType::LT => write!(f, "<"),
+			InfixType::GT => write!(f, ">"),
+			InfixType::EQ => write!(f, "=="),
+			InfixType::NEQ => write!(f, "!="),
+		}
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InfixExpression {
+	left: Box<Expression>,
+	operator: InfixType,
+	right: Box<Expression>,
+}
+
+impl fmt::Display for InfixExpression {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "({} {} {})", self.left, self.operator, self.right)
 	}
 }
 
@@ -271,7 +311,35 @@ fn test_parse_statement_expression_prefix() {
 	assert_eq!(actual.statements, expecteds);
 }
 
+#[test]
+fn test_parse_statement_expression_infix() {
+	let input = r#"7 + 15;
+7 - 15;
+7 * 15;
+7 / 15;
+7 > 15;
+7 < 15;
+7 == 15;
+7 != 15;"#;
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::PLUS, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::MINUS, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::MULTIPLICATION, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::DIVISION, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::GT, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::LT, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::NEQ, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
 type ParserPrefixFunc = fn(&mut Parser) -> Result<Expression, ParserError>;
+type ParserInfixFunc = fn(&mut Parser, Expression) -> Result<Expression, ParserError>;
 
 pub struct Parser {
 	lexer: Lexer,
@@ -289,6 +357,7 @@ pub enum ParserError {
 	UNEXPECTED_STATEMENT_TOKEN(Token),
 	UNEXPECTED_PREFIX_FUNC(Token),
 	UNEXPECTED_PREFIX_TYPE(Token),
+	UNEXPECTED_INFIX_TYPE(Token),
 }
 
 impl fmt::Display for ParserError {
@@ -306,12 +375,13 @@ impl fmt::Display for ParserError {
 			ParserError::UNEXPECTED_STATEMENT_TOKEN(t) => write!(f, "unexpected statement token: {}", t),
 			ParserError::UNEXPECTED_PREFIX_FUNC(t) => write!(f, "unexpected prefix func for: {}", t),
 			ParserError::UNEXPECTED_PREFIX_TYPE(t) => write!(f, "unexpected prefix type for token: {}", t),
+			ParserError::UNEXPECTED_INFIX_TYPE(t) => write!(f, "unexpected infix type for token: {}", t),
 
 		}
 	}
 }
 
-
+#[derive(PartialOrd, PartialEq)]
 enum Precedence {
 	//
 	LOWEST,
@@ -327,6 +397,21 @@ enum Precedence {
 	PREFIX,
 	// func(X)
 	CALL,
+}
+
+fn get_precedence_for_token_type(token: &Token) -> Precedence {
+	match token {
+		Token::PLUS => Precedence::EQUALS,
+		Token::EQ => Precedence::EQUALS,
+		Token::NEQ => Precedence::EQUALS,
+		Token::LT => Precedence::LESSGREATER,
+		Token::GT => Precedence::LESSGREATER,
+		Token::PLUS => Precedence::SUM,
+		Token::MINUS => Precedence::SUM,
+		Token::SLASH => Precedence::PRODUCT,
+		Token::ASTERISK => Precedence::PRODUCT,
+		_ => Precedence::LOWEST,
+	}
 }
 
 impl Default for Parser {
@@ -360,6 +445,14 @@ impl Parser {
 
 	fn peek_token_is(&self, token: Token) -> bool {
 		return self.peek_token == token
+	}
+
+	fn curr_precedence(&self) -> Precedence {
+		return get_precedence_for_token_type(&self.curr_token);
+	}
+
+	fn peek_precedence(&self) -> Precedence {
+		return get_precedence_for_token_type(&self.peek_token);
 	}
 
 	fn expect_peek(&mut self, token: Token) -> Result<(), ParserError> {
@@ -456,19 +549,40 @@ impl Parser {
 	}
 
 	fn parse_prefix(&self) -> Option<ParserPrefixFunc> {
-		let prefix = match &self.curr_token {
+		Some(match &self.curr_token {
 			Token::IDENT(_) => Parser::parse_statement_identifier,
 			Token::INT(_) => Parser::parse_literal_integer,
 			Token::BANG | Token::MINUS => Parser::parse_expression_prefix,
 			_ => return None
-		};
-
-		Some(prefix)
+		})
 	}
 
+	fn parse_infix(&self) -> Option<ParserInfixFunc> {
+		Some(match &self.peek_token {
+			| Token::PLUS
+			| Token::MINUS
+			| Token::SLASH
+			| Token::ASTERISK
+			| Token::EQ
+			| Token::NEQ
+			| Token::LT
+			| Token::GT => Parser::parse_expression_infix,
+			_ => return None
+		})
+	}
+
+	// Hearth of our Pratt parser
 	fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ParserError> {
 		let prefix = self.parse_prefix().ok_or_else(|| ParserError::UNEXPECTED_PREFIX_FUNC(self.curr_token.clone()))?;
-		Ok(prefix(self)?)
+		let mut left_exp = prefix(self)?;
+
+		while !self.peek_token_is(Token::SEMICOLON) && precedence < self.peek_precedence() {
+			let infix = self.parse_infix().ok_or_else(|| ParserError::UNEXPECTED_INFIX_TYPE(self.curr_token.clone()))?;
+			self.next_token();
+			left_exp = infix(self, left_exp)?;
+		}
+		
+		Ok(left_exp)
 	}
 
 	fn parse_expression_prefix(&mut self) -> Result<Expression, ParserError> {
@@ -482,6 +596,29 @@ impl Parser {
 
 		match self.parse_expression(Precedence::PREFIX) {
 			Ok(expr) => Ok(Expression::PREFIX(PrefixExpression{operator: prefix_type, right: Box::new(expr)})),
+			Err(e) => Err(e),
+		}
+	}
+
+	fn parse_expression_infix(&mut self, left: Expression) -> Result<Expression, ParserError> {
+		let infix_type = match self.curr_token {
+			Token::PLUS => InfixType::PLUS,
+			Token::MINUS => InfixType::MINUS,
+			Token::SLASH => InfixType::DIVISION,
+			Token::ASTERISK => InfixType::MULTIPLICATION,
+			Token::EQ => InfixType::EQ,
+			Token::NEQ => InfixType::NEQ,
+			Token::LT => InfixType::LT,
+			Token::GT => InfixType::GT,
+			_ => return Err(ParserError::UNEXPECTED_INFIX_TYPE(self.curr_token.clone()))
+		};
+
+		let curr_precedence = self.curr_precedence();
+
+		self.next_token();
+
+		match self.parse_expression(curr_precedence) {
+			Ok(expr) => Ok(Expression::INFIX(InfixExpression{left: Box::new(left), operator: infix_type, right: Box::new(expr)})),
 			Err(e) => Err(e),
 		}
 	}
