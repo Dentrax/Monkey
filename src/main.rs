@@ -373,6 +373,21 @@ fn test_parse_statement_expression_integer() {
 }
 
 #[test]
+fn test_parse_statement_expression_string() {
+	let input = r#""helloworld!";"hello world!";"hello+world!";"#;
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(Expression::LITERAL(Literal::STRING(String::from("helloworld!")))),
+		Statement::EXPRESSION(Expression::LITERAL(Literal::STRING(String::from("hello world!")))),
+		Statement::EXPRESSION(Expression::LITERAL(Literal::STRING(String::from("hello+world!")))),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
+#[test]
 fn test_parse_statement_expression_prefix() {
 	let input = "!7;-15;";
 
@@ -567,16 +582,23 @@ impl Parser {
 	}
 
 
-	//TODO: Token::INT(String)?
 	fn parse_literal_integer(&mut self) -> Result<Expression, ParserError> {
-		match self.curr_token {
+		match &self.curr_token {
 			Token::INT(i) => {
-				Ok(Expression::LITERAL(Literal::INT(i)))
+				Ok(Expression::LITERAL(Literal::INT(i.clone())))
 			}
 			_ => Err(ParserError::INVALID_TOKEN(self.curr_token.clone()))
 		}
 	}
 
+	fn parse_literal_string(&mut self) -> Result<Expression, ParserError> {
+		match &self.curr_token {
+			Token::STRING(i) => {
+				Ok(Expression::LITERAL(Literal::STRING(i.clone())))
+			}
+			_ => Err(ParserError::INVALID_TOKEN(self.curr_token.clone()))
+		}
+	}
 
 	fn parse_statement_let(&mut self) -> Result<Statement, ParserError> {
 		self.next_token();
@@ -626,6 +648,7 @@ impl Parser {
 		Some(match &self.curr_token {
 			Token::IDENT(_) => Parser::parse_statement_identifier,
 			Token::INT(_) => Parser::parse_literal_integer,
+			Token::STRING(_) => Parser::parse_literal_string,
 			Token::BANG | Token::MINUS => Parser::parse_expression_prefix,
 			_ => return None
 		})
