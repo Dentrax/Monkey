@@ -1,6 +1,6 @@
 use std::{fmt};
 use std::io;
-use std::fmt::{Error, Formatter};
+use std::fmt::{Error, Formatter, Display};
 
 const PROMPT: &str = ">> ";
 
@@ -28,6 +28,44 @@ fn main() {
 	println!("Hello, world!");
 }
 
+//=== OBJ BEGIN ===
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Object {
+	STRING(String)
+}
+
+impl fmt::Display for Object {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Object::STRING(s) => s.fmt(f),
+		}
+	}
+}
+
+#[test]
+fn test_object_string() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: r#"hello world!"#,
+			expected: Object::STRING(String::from("hello world!"))
+		},
+	];
+
+	for test in tests {
+		//TODO: impl evaluator
+		assert_eq!(true, true);
+	}
+}
+
+
+//=== OBJ END ====
+
 //=== AST BEGIN ===
 
 pub enum Node {
@@ -40,13 +78,15 @@ pub enum Node {
 pub enum Literal {
 	INT(usize),
 	STRING(String),
+	BOOL(bool),
 }
 
 impl fmt::Display for Literal {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		match self {
 			Literal::INT(i) => write!(f, "{}", i),
-			Literal::STRING(s) => write!(f, "{}", s)
+			Literal::STRING(s) => write!(f, "{}", s),
+			Literal::BOOL(b) => write!(f, "{}", b),
 		}
 	}
 }
@@ -388,14 +428,30 @@ fn test_parse_statement_expression_string() {
 }
 
 #[test]
+fn test_parse_statement_expression_boolean() {
+	let input = "true;false;";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(Expression::LITERAL(Literal::BOOL(true))),
+		Statement::EXPRESSION(Expression::LITERAL(Literal::BOOL(false))),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
+#[test]
 fn test_parse_statement_expression_prefix() {
-	let input = "!7;-15;";
+	let input = "!7;-15;!true;!false";
 
 	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 	let expecteds = vec![
 		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::INT(7)))})),
 		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::MINUS, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::BOOL(true)))})),
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::BOOL(false)))})),
 	];
 
 	assert_eq!(actual.statements, expecteds);
@@ -410,7 +466,10 @@ fn test_parse_statement_expression_infix() {
 7 > 15;
 7 < 15;
 7 == 15;
-7 != 15;"#;
+7 != 15;
+true == true;
+true != false;
+false == false;"#;
 
 	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
@@ -423,6 +482,9 @@ fn test_parse_statement_expression_infix() {
 		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::LT, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
 		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
 		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::NEQ, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::BOOL(true))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::BOOL(true)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::BOOL(true))), operator: InfixType::NEQ, right: Box::new(Expression::LITERAL(Literal::BOOL(false)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::BOOL(false))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::BOOL(false)))})),
 	];
 
 	assert_eq!(actual.statements, expecteds);
@@ -600,6 +662,15 @@ impl Parser {
 		}
 	}
 
+	fn parse_literal_boolean(&mut self) -> Result<Expression, ParserError> {
+		match &self.curr_token {
+			Token::BOOL(i) => {
+				Ok(Expression::LITERAL(Literal::BOOL(i.clone())))
+			}
+			_ => Err(ParserError::INVALID_TOKEN(self.curr_token.clone()))
+		}
+	}
+
 	fn parse_statement_let(&mut self) -> Result<Statement, ParserError> {
 		self.next_token();
 
@@ -649,6 +720,7 @@ impl Parser {
 			Token::IDENT(_) => Parser::parse_statement_identifier,
 			Token::INT(_) => Parser::parse_literal_integer,
 			Token::STRING(_) => Parser::parse_literal_string,
+			Token::BOOL(_) => Parser::parse_literal_boolean,
 			Token::BANG | Token::MINUS => Parser::parse_expression_prefix,
 			_ => return None
 		})
@@ -840,13 +912,13 @@ fn test_next_token_condition() {
 		Token::RPAREN,
 		Token::LBRACE,
 		Token::RETURN,
-		Token::TRUE,
+		Token::BOOL(true),
 		Token::SEMICOLON,
 		Token::RBRACE,
 		Token::ELSE,
 		Token::LBRACE,
 		Token::RETURN,
-		Token::FALSE,
+		Token::BOOL(false),
 		Token::SEMICOLON,
 		Token::RBRACE,
 		Token::EOF,
@@ -1128,8 +1200,8 @@ impl Token {
 		match ident.as_str() {
 			"fn" => Token::FUNCTION,
 			"let" => Token::LET,
-			"true" => Token::TRUE,
-			"false" => Token::FALSE,
+			"true" => Token::BOOL(true),
+			"false" => Token::BOOL(false),
 			"if" => Token::IF,
 			"else" => Token::ELSE,
 			"return" => Token::RETURN,
