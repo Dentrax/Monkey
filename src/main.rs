@@ -101,6 +101,7 @@ pub enum Expression {
 
 	IF(IfExpression),
 	FUNCTION(FunctionLiteral),
+	CALL(CallExpression),
 }
 
 impl fmt::Display for Expression {
@@ -112,6 +113,7 @@ impl fmt::Display for Expression {
 			Expression::INFIX(i) => i.fmt(f),
 			Expression::IF(i) => i.fmt(f),
 			Expression::FUNCTION(i) => i.fmt(f),
+			Expression::CALL(i) => i.fmt(f),
 		}
 	}
 }
@@ -210,6 +212,22 @@ pub struct FunctionLiteral {
 impl fmt::Display for FunctionLiteral {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "fn({}) {{ {} }}", self.parameters.join(", "), self.body)
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallExpression {
+	function: Box<Expression>,
+	arguments: Vec<Expression>,
+}
+
+impl fmt::Display for CallExpression {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		let mut arguments: Vec<String> = vec![];
+		for arg in &self.arguments {
+			arguments.push(format!("{}", arg));
+		}
+		write!(f, "{}({})", self.function, arguments.join(", "))
 	}
 }
 
@@ -415,6 +433,34 @@ fn test_ast_operator_precedence_group_expression_string() {
 		Test {
 			input: "!(true == true)",
 			expected: "(!(true == true))",
+		},
+	];
+
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		assert_eq!(actual.to_string(), test.expected);
+	}
+}
+
+#[test]
+fn test_ast_operator_precedence_call() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: &'a str,
+	}
+
+	let tests = vec![
+		Test {
+			input: "a + add(b * c) + d",
+			expected: "((a + add((b * c))) + d)",
+		},
+		Test {
+			input: "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+			expected: "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+		},
+		Test {
+			input: "add(a + b + c * d / f + g)",
+			expected: "add((((a + b) + ((c * d) / f)) + g))",
 		},
 	];
 
@@ -714,6 +760,48 @@ fn test_parse_statement_expression_function_parameters() {
 	}
 }
 
+#[test]
+fn test_parse_statement_expression_call() {
+	let input = "add(1, 2 * 3, 4 + 5);";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(
+			Expression::CALL(
+				CallExpression{
+					function: Box::new(
+						Expression::IDENT(String::from("add"))
+					),
+					arguments: vec![
+						Expression::LITERAL(
+							Literal::INT(1)
+						),
+						Expression::INFIX(
+							InfixExpression{
+								left: Box::new(Expression::LITERAL(Literal::INT(2))),
+								operator: InfixType::MULTIPLICATION,
+								right: Box::new(Expression::LITERAL(Literal::INT(3))),
+							}
+						),
+						Expression::INFIX(
+							InfixExpression{
+								left: Box::new(Expression::LITERAL(Literal::INT(4))),
+								operator: InfixType::PLUS,
+								right: Box::new(Expression::LITERAL(Literal::INT(5))),
+
+							}
+						)
+					],
+				}
+			)
+		),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
+
 type ParserPrefixFunc = fn(&mut Parser) -> Result<Expression, ParserError>;
 type ParserInfixFunc = fn(&mut Parser, Expression) -> Result<Expression, ParserError>;
 
@@ -784,6 +872,7 @@ fn get_precedence_for_token_type(token: &Token) -> Precedence {
 		Token::GT => Precedence::LESSGREATER,
 		Token::SLASH => Precedence::PRODUCT,
 		Token::ASTERISK => Precedence::PRODUCT,
+		Token::LPAREN => Precedence::CALL,
 		_ => Precedence::LOWEST,
 	}
 }
@@ -1018,6 +1107,7 @@ impl Parser {
 			| Token::NEQ
 			| Token::LT
 			| Token::GT => Parser::parse_expression_infix,
+			Token::LPAREN => Parser::parse_expression_call,
 			_ => return None
 		})
 	}
@@ -1072,6 +1162,42 @@ impl Parser {
 			Ok(expr) => Ok(Expression::INFIX(InfixExpression { left: Box::new(left), operator: infix_type, right: Box::new(expr) })),
 			Err(e) => Err(e),
 		}
+	}
+
+	fn parse_expression_call(&mut self, function: Expression) -> Result<Expression, ParserError> {
+		let args = self.parse_expression_call_arguments()?;
+		Ok(
+			Expression::CALL(
+				CallExpression{
+					function: Box::new(function),
+					arguments: args,
+				}
+			)
+		)
+	}
+
+	fn parse_expression_call_arguments(&mut self) -> Result<Vec<Expression>, ParserError> {
+		let mut arguments = vec![];
+
+		if self.peek_token_is(Token::RPAREN) {
+			self.next_token();
+			return Ok(arguments);
+		}
+
+		self.next_token();
+
+		arguments.push(self.parse_expression(Precedence::LOWEST)?);
+
+		while self.peek_token_is(Token::COMMA) {
+			self.next_token();
+			self.next_token();
+
+			arguments.push(self.parse_expression(Precedence::LOWEST)?);
+		}
+
+		self.expect_peek(Token::RPAREN)?;
+
+		Ok(arguments)
 	}
 
 	fn parse_expression_grouped(&mut self) -> Result<Expression, ParserError> {
