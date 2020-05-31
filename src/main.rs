@@ -1,6 +1,7 @@
 use std::{fmt};
 use std::io;
 use std::fmt::{Error, Formatter};
+use crate::Expression::LITERAL;
 
 const PROMPT: &str = ">> ";
 
@@ -472,44 +473,72 @@ fn test_ast_operator_precedence_call() {
 
 #[test]
 fn test_parse_statement_let() {
-	let input = r#"
-let f = 03;
-let u = 07;
-let r = 15;
-let k = 32;
-let a = 34;
-let n = 35;"#;
+	struct Test<'a> {
+		input: &'a str,
+		expected: Statement,
+	}
 
-	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
-
-	let expecteds = vec![
-		Statement::LET(LetStatement { name: String::from("f"), value: Expression::IDENT(String::from("TODO::LET")) }),
-		Statement::LET(LetStatement { name: String::from("u"), value: Expression::IDENT(String::from("TODO::LET")) }),
-		Statement::LET(LetStatement { name: String::from("r"), value: Expression::IDENT(String::from("TODO::LET")) }),
-		Statement::LET(LetStatement { name: String::from("k"), value: Expression::IDENT(String::from("TODO::LET")) }),
-		Statement::LET(LetStatement { name: String::from("a"), value: Expression::IDENT(String::from("TODO::LET")) }),
-		Statement::LET(LetStatement { name: String::from("n"), value: Expression::IDENT(String::from("TODO::LET")) }),
+	let tests = vec![
+		Test {
+			input: "let x = 7;",
+			expected: Statement::LET(LetStatement{name: String::from("x"), value: Expression::LITERAL(Literal::INT(7))}),
+		},
+		Test {
+			input: "let y = true;",
+			expected: Statement::LET(LetStatement{name: String::from("y"), value: Expression::LITERAL(Literal::BOOL(true))}),
+		},
+		Test {
+			input: "let z = y;",
+			expected: Statement::LET(LetStatement{name: String::from("z"), value: Expression::IDENT(String::from("y"))}),
+		},
+		Test {
+			input: "let w = \"furkan\";",
+			expected: Statement::LET(LetStatement{name: String::from("w"), value: Expression::LITERAL(Literal::STRING(String::from("furkan")))}),
+		},
 	];
 
-	assert_eq!(actual.statements, expecteds);
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		assert_eq!(actual.statements.len(), 1);
+		if let Some(stmt) = actual.statements.first() {
+			assert_eq!(*stmt, test.expected);
+		} else {
+			assert!(false);
+		};
+	}
 }
 
 #[test]
 fn test_parse_statement_return() {
-	let input = r#"
-return 15;
-return 34;
-return 707707;"#;
+	struct Test<'a> {
+		input: &'a str,
+		expected: Statement,
+	}
 
-	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
-
-	let expecteds = vec![
-		Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }),
-		Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }),
-		Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }),
+	let tests = vec![
+		Test {
+			input: "return 15;",
+			expected: Statement::RETURN(ReturnStatement { value: Expression::LITERAL(Literal::INT(15)) }),
+		},
+		Test {
+			input: "return x;",
+			expected: Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("x")) }),
+		},
+		Test {
+			input: "return \"string\";",
+			expected: Statement::RETURN(ReturnStatement { value: Expression::LITERAL(Literal::STRING(String::from("string")))}),
+		},
 	];
 
-	assert_eq!(actual.statements, expecteds);
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		assert_eq!(actual.statements.len(), 1);
+		if let Some(stmt) = actual.statements.first() {
+			assert_eq!(*stmt, test.expected);
+		} else {
+			assert!(false);
+		};
+	}
 }
 
 #[test]
@@ -726,7 +755,6 @@ fn test_parse_statement_expression_function() {
 	assert_eq!(actual.statements, expecteds);
 }
 
-
 #[test]
 fn test_parse_statement_expression_function_parameters() {
 	struct Test<'a> {
@@ -926,7 +954,6 @@ impl Parser {
 		return Err(ParserError::UNEXPECTED_TOKEN { want: format!("{}", self.peek_token), got: format!("{}", self.curr_token) });
 	}
 
-	//TODO: vec err arr
 	fn parse(&mut self) -> (Program, Vec<ParserError>) {
 		let mut program = Program::new();
 		let mut errs = Vec::new();
@@ -1034,23 +1061,40 @@ impl Parser {
 
 		self.expect_peek(Token::ASSIGN)?;
 
-		//TODO: We're skipping the expressions until we encounter a semicolon
-		while !self.curr_token_is(Token::SEMICOLON) {
+		self.next_token();
+
+		let expr = self.parse_expression(Precedence::LOWEST)?;
+
+		if self.peek_token_is(Token::SEMICOLON) {
 			self.next_token();
 		}
 
-		Ok(Statement::LET(LetStatement { name: ident.clone(), value: Expression::IDENT(String::from("TODO::LET")) }))
+		Ok(
+			Statement::LET(
+				LetStatement {
+					name: ident.clone(),
+					value: expr
+				}
+			)
+		)
 	}
 
 	fn parse_statement_return(&mut self) -> Result<Statement, ParserError> {
 		self.next_token();
 
-		//TODO: We're skipping the expressions until we encounter a semicolon
-		while !self.curr_token_is(Token::SEMICOLON) {
+		let expr = self.parse_expression(Precedence::LOWEST)?;
+
+		if self.peek_token_is(Token::SEMICOLON) {
 			self.next_token();
 		}
 
-		Ok(Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }))
+		Ok(
+			Statement::RETURN(
+				ReturnStatement {
+					value: expr
+				}
+			)
+		)
 	}
 
 	fn parse_statement_expression(&mut self) -> Result<Statement, ParserError> {
@@ -1524,7 +1568,7 @@ impl Lexer {
 					return to;
 				} else if Lexer::is_digit(self.ch) {
 					let id = self.read_number();
-					return Token::INT(id.parse::<usize>().unwrap()); //TODO: match ret err?
+					return Token::INT(id.parse::<usize>().unwrap());
 				}
 				t = Token::ILLEGAL(self.ch);
 			}
