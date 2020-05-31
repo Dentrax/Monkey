@@ -100,6 +100,7 @@ pub enum Expression {
 	INFIX(InfixExpression),
 
 	IF(IfExpression),
+	FUNCTION(FunctionLiteral),
 }
 
 impl fmt::Display for Expression {
@@ -110,6 +111,7 @@ impl fmt::Display for Expression {
 			Expression::PREFIX(i) => i.fmt(f),
 			Expression::INFIX(i) => i.fmt(f),
 			Expression::IF(i) => i.fmt(f),
+			Expression::FUNCTION(i) => i.fmt(f),
 		}
 	}
 }
@@ -196,6 +198,18 @@ impl fmt::Display for IfExpression {
 			write!(f, " else {{ {} }}", s)?;
 		}
 		Ok(())
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionLiteral {
+	parameters: Vec<String>,
+	body: BlockStatement,
+}
+
+impl fmt::Display for FunctionLiteral {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "fn({}) {{ {} }}", self.parameters.join(", "), self.body)
 	}
 }
 
@@ -633,6 +647,73 @@ fn test_parse_statement_expression_if_else() {
 	assert_eq!(actual.statements, expecteds);
 }
 
+#[test]
+fn test_parse_statement_expression_function() {
+	let input = "fn(x, y) { z + w; }";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(
+			Expression::FUNCTION(
+				FunctionLiteral{
+					parameters: vec![
+						String::from("x"),
+						String::from("y"),
+					],
+					body: BlockStatement{
+						statements: vec![
+							Statement::EXPRESSION(Expression::INFIX(
+								InfixExpression{
+									left: Box::new(Expression::IDENT(String::from("z"))),
+									operator: InfixType::PLUS,
+									right: Box::new(Expression::IDENT(String::from("w"))),
+								}
+							)),
+						],
+					}
+				}
+			)
+		),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
+
+#[test]
+fn test_parse_statement_expression_function_parameters() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Vec<String>,
+	}
+
+	let tests = vec![
+		Test {
+			input: "fn() {};",
+			expected: vec![],
+		},
+		Test {
+			input: "fn(x) {};",
+			expected: vec![String::from("x")],
+		},
+		Test {
+			input: "fn(x, y, z) {};",
+			expected: vec![String::from("x"), String::from("y"), String::from("z")],
+		},
+	];
+
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		assert_eq!(actual.statements.len(), 1);
+		if let Some(Statement::EXPRESSION(Expression::FUNCTION(literal))) = actual.statements.first() {
+			assert_eq!(literal.parameters, test.expected);
+		} else {
+			assert!(false);
+		};
+	}
+}
+
 type ParserPrefixFunc = fn(&mut Parser) -> Result<Expression, ParserError>;
 type ParserInfixFunc = fn(&mut Parser, Expression) -> Result<Expression, ParserError>;
 
@@ -813,6 +894,50 @@ impl Parser {
 		}
 	}
 
+	fn parse_literal_function(&mut self) -> Result<Expression, ParserError> {
+		self.expect_peek(Token::LPAREN)?;
+
+		let parameters = self.parse_literal_function_parameters()?;
+
+		self.expect_peek(Token::LBRACE)?;
+
+		let body = if let Statement::BLOCK(block) = self.parse_statement_block()? {
+			block
+		} else{
+			return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()))
+		};
+
+		Ok(Expression::FUNCTION(
+			FunctionLiteral{
+				parameters,
+				body,
+			}
+		))
+	}
+
+	fn parse_literal_function_parameters(&mut self) -> Result<Vec<String>, ParserError> {
+		let mut identifiers = Vec::new();
+
+		if self.peek_token_is(Token::RPAREN) {
+			self.next_token();
+			return Ok(identifiers);
+		}
+
+		self.next_token();
+		identifiers.push(self.read_identifier()?);
+
+		while self.peek_token_is(Token::COMMA) {
+			self.next_token();
+			self.next_token();
+
+			identifiers.push(self.read_identifier()?);
+		}
+
+		self.expect_peek(Token::RPAREN)?;
+
+		Ok(identifiers)
+	}
+
 	fn parse_statement_let(&mut self) -> Result<Statement, ParserError> {
 		self.next_token();
 
@@ -878,6 +1003,7 @@ impl Parser {
 			Token::BANG | Token::MINUS => Parser::parse_expression_prefix,
 			Token::LPAREN => Parser::parse_expression_grouped,
 			Token::IF => Parser::parse_expression_if,
+			Token::FUNCTION => Parser::parse_literal_function,
 			_ => return None
 		})
 	}
