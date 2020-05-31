@@ -836,6 +836,28 @@ fn test_next_token_condition() {
 	}
 }
 
+#[test]
+fn test_next_token_string() {
+	let input = r#"
+"foobar"
+"foo bar"
+"+foo+bar+"
+"#;
+
+	let expected = vec![
+		Token::STRING(String::from("foobar")),
+		Token::STRING(String::from("foo bar")),
+		Token::STRING(String::from("+foo+bar+")),
+		Token::EOF,
+	];
+
+	let mut l = Lexer::new(input.to_owned());
+	for i in expected {
+		let t = l.next_token();
+		assert_eq!(t, i);
+	}
+}
+
 
 struct Lexer {
 	//current input string
@@ -894,6 +916,17 @@ impl Lexer {
 		return self.input[pos..self.pos].to_string();
 	}
 
+	fn read_string(&mut self) -> String {
+		let pos = self.pos + 1;
+		loop {
+			self.read_char();
+			if self.ch == '"' || self.ch == '\0' {
+				break;
+			}
+		}
+		return self.input[pos..self.pos].to_string();
+	}
+
 	fn next_token(&mut self) -> Token {
 		let t: Token;
 
@@ -912,6 +945,7 @@ impl Lexer {
 			',' => t = Token::COMMA,
 			'{' => t = Token::LBRACE,
 			'}' => t = Token::RBRACE,
+			'"' => t = Token::STRING(self.read_string()),
 			'\0' => t = Token::EOF,
 			'\t' => t = Token::TAB,
 			'\r' => t = Token::CR,
@@ -984,6 +1018,7 @@ pub enum Token {
 	IDENT(String),
 	INT(usize),
 	BOOL(bool),
+	STRING(String),
 
 	EQ,
 	NEQ,
@@ -1029,6 +1064,7 @@ impl fmt::Display for Token {
 			Token::IDENT(i) => write!(f, "{}", i),
 			Token::INT(i) => write!(f, "{}", i),
 			Token::BOOL(i) => write!(f, "{}", i),
+			Token::STRING(i) => write!(f, "{}", i),
 
 			Token::EQ => write!(f, "EQ"),
 			Token::NEQ => write!(f, "NEQ"),
