@@ -1,6 +1,6 @@
 use std::{fmt};
 use std::io;
-use std::fmt::{Error, Formatter, Display};
+use std::fmt::{Error, Formatter};
 
 const PROMPT: &str = ">> ";
 
@@ -17,11 +17,11 @@ fn main() {
 						println!("TOKEN: {}", tok);
 					}
 				}
-			},
+			}
 			Err(e) => {
 				println!("Something went wrong: {}", e);
-				break
-			},
+				break;
+			}
 		};
 	}
 
@@ -53,7 +53,7 @@ fn test_object_string() {
 	let tests = vec![
 		Test {
 			input: r#"hello world!"#,
-			expected: Object::STRING(String::from("hello world!"))
+			expected: Object::STRING(String::from("hello world!")),
 		},
 	];
 
@@ -98,6 +98,20 @@ pub enum Expression {
 
 	PREFIX(PrefixExpression),
 	INFIX(InfixExpression),
+
+	IF(IfExpression),
+}
+
+impl fmt::Display for Expression {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Expression::IDENT(i) => i.fmt(f),
+			Expression::LITERAL(i) => i.fmt(f),
+			Expression::PREFIX(i) => i.fmt(f),
+			Expression::INFIX(i) => i.fmt(f),
+			Expression::IF(i) => i.fmt(f),
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -169,6 +183,23 @@ impl fmt::Display for InfixExpression {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct IfExpression {
+	condition: Box<Expression>,
+	consequence: BlockStatement,
+	alternative: Option<BlockStatement>,
+}
+
+impl fmt::Display for IfExpression {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "if {} {{ {} }}", self.condition, self.consequence)?;
+		if let Some(s) = &self.alternative {
+			write!(f, " else {{ {} }}", s)?;
+		}
+		Ok(())
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct LetStatement {
 	name: String,
 	value: Expression,
@@ -192,6 +223,20 @@ impl fmt::Display for ReturnStatement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct BlockStatement {
+	statements: Vec<Statement>,
+}
+
+impl fmt::Display for BlockStatement {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		for stmt in &self.statements {
+			stmt.fmt(f)?;
+		}
+		Ok(())
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
 	INCOMPLETE,
 
@@ -201,7 +246,21 @@ pub enum Statement {
 	//value => x + y
 	EXPRESSION(Expression),
 
-	RETURN(ReturnStatement)
+	RETURN(ReturnStatement),
+
+	BLOCK(BlockStatement),
+}
+
+impl fmt::Display for Statement {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Statement::INCOMPLETE => write!(f, "incomplete"),
+			Statement::LET(stmt) => stmt.fmt(f),
+			Statement::EXPRESSION(stmt) => stmt.fmt(f),
+			Statement::RETURN(stmt) => stmt.fmt(f),
+			Statement::BLOCK(stmt) => stmt.fmt(f),
+		}
+	}
 }
 
 pub struct Program {
@@ -224,17 +283,6 @@ impl fmt::Display for Node {
 	}
 }
 
-impl fmt::Display for Expression {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			Expression::IDENT(i) => write!(f, "{}", i),
-			Expression::LITERAL(i) => write!(f, "{}", i),
-			Expression::PREFIX(i) => write!(f, "{}", i),
-			Expression::INFIX(i) => write!(f, "{}", i),
-		}
-	}
-}
-
 impl fmt::Display for Program {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		for curr in &self.statements {
@@ -244,23 +292,12 @@ impl fmt::Display for Program {
 	}
 }
 
-impl fmt::Display for Statement {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			Statement::INCOMPLETE => write!(f, "incomplete"),
-			Statement::LET(stmt) => stmt.fmt(f),
-			Statement::EXPRESSION(stmt) => stmt.fmt(f),
-			Statement::RETURN(stmt) => stmt.fmt(f),
-		}
-	}
-}
-
 #[test]
 fn test_ast_string() {
 	let program = Program {
 		statements: vec![
-			Statement::LET(LetStatement{name: String::from("country"), value: Expression::IDENT(String::from("istanbul"))}),
-			Statement::LET(LetStatement{name: String::from("neighborhood"), value: Expression::IDENT(String::from("maslak"))})
+			Statement::LET(LetStatement { name: String::from("country"), value: Expression::IDENT(String::from("istanbul")) }),
+			Statement::LET(LetStatement { name: String::from("neighborhood"), value: Expression::IDENT(String::from("maslak")) })
 		]
 	};
 
@@ -283,15 +320,15 @@ fn test_ast_operator_precedence_string() {
 	let tests = vec![
 		Test {
 			input: "-a * b",
-			expected: "((-a) * b)"
+			expected: "((-a) * b)",
 		},
 		Test {
 			input: "!-a",
-			expected: "(!(-a))"
+			expected: "(!(-a))",
 		},
 		Test {
 			input: "a + b + c",
-			expected: "((a + b) + c)"
+			expected: "((a + b) + c)",
 		},
 		Test {
 			input: "a + b - c",
@@ -299,15 +336,15 @@ fn test_ast_operator_precedence_string() {
 		},
 		Test {
 			input: "a * b * c",
-			expected: "((a * b) * c)"
+			expected: "((a * b) * c)",
 		},
 		Test {
 			input: "a * b / c",
-			expected: "((a * b) / c)"
+			expected: "((a * b) / c)",
 		},
 		Test {
 			input: "a + b / c",
-			expected: "(a + (b / c))"
+			expected: "(a + (b / c))",
 		},
 		Test {
 			input: "a + b * c + d / e - f",
@@ -315,19 +352,55 @@ fn test_ast_operator_precedence_string() {
 		},
 		Test {
 			input: "3 + 4; -5 * 5",
-			expected: "(3 + 4)((-5) * 5)"
+			expected: "(3 + 4)((-5) * 5)",
 		},
 		Test {
 			input: "5 > 4 == 3 < 4",
-			expected: "((5 > 4) == (3 < 4))"
+			expected: "((5 > 4) == (3 < 4))",
 		},
 		Test {
 			input: "5 < 4 != 3 > 4",
-			expected: "((5 < 4) != (3 > 4))"
+			expected: "((5 < 4) != (3 > 4))",
 		},
 		Test {
 			input: "3 + 4 * 5 == 3 * 1 + 4 * 5",
 			expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+		},
+	];
+
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		assert_eq!(actual.to_string(), test.expected);
+	}
+}
+
+#[test]
+fn test_ast_operator_precedence_group_expression_string() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: &'a str,
+	}
+
+	let tests = vec![
+		Test {
+			input: "1 + (2 + 3) + 4",
+			expected: "((1 + (2 + 3)) + 4)",
+		},
+		Test {
+			input: "(5 + 5) * 2",
+			expected: "((5 + 5) * 2)",
+		},
+		Test {
+			input: "2 / (5 + 5)",
+			expected: "(2 / (5 + 5))",
+		},
+		Test {
+			input: "-(5 + 5)",
+			expected: "(-(5 + 5))",
+		},
+		Test {
+			input: "!(true == true)",
+			expected: "(!(true == true))",
 		},
 	];
 
@@ -350,12 +423,12 @@ let n = 35;"#;
 	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 	let expecteds = vec![
-		Statement::LET(LetStatement{name: String::from("f"), value: Expression::IDENT(String::from("TODO::LET"))}),
-		Statement::LET(LetStatement{name: String::from("u"), value: Expression::IDENT(String::from("TODO::LET"))}),
-		Statement::LET(LetStatement{name: String::from("r"), value: Expression::IDENT(String::from("TODO::LET"))}),
-		Statement::LET(LetStatement{name: String::from("k"), value: Expression::IDENT(String::from("TODO::LET"))}),
-		Statement::LET(LetStatement{name: String::from("a"), value: Expression::IDENT(String::from("TODO::LET"))}),
-		Statement::LET(LetStatement{name: String::from("n"), value: Expression::IDENT(String::from("TODO::LET"))}),
+		Statement::LET(LetStatement { name: String::from("f"), value: Expression::IDENT(String::from("TODO::LET")) }),
+		Statement::LET(LetStatement { name: String::from("u"), value: Expression::IDENT(String::from("TODO::LET")) }),
+		Statement::LET(LetStatement { name: String::from("r"), value: Expression::IDENT(String::from("TODO::LET")) }),
+		Statement::LET(LetStatement { name: String::from("k"), value: Expression::IDENT(String::from("TODO::LET")) }),
+		Statement::LET(LetStatement { name: String::from("a"), value: Expression::IDENT(String::from("TODO::LET")) }),
+		Statement::LET(LetStatement { name: String::from("n"), value: Expression::IDENT(String::from("TODO::LET")) }),
 	];
 
 	assert_eq!(actual.statements, expecteds);
@@ -371,9 +444,9 @@ return 707707;"#;
 	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 	let expecteds = vec![
-		Statement::RETURN(ReturnStatement{ value: Expression::IDENT(String::from("TODO::RETURN"))}),
-		Statement::RETURN(ReturnStatement{ value: Expression::IDENT(String::from("TODO::RETURN"))}),
-		Statement::RETURN(ReturnStatement{ value: Expression::IDENT(String::from("TODO::RETURN"))}),
+		Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }),
+		Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }),
+		Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }),
 	];
 
 	assert_eq!(actual.statements, expecteds);
@@ -448,10 +521,10 @@ fn test_parse_statement_expression_prefix() {
 	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 	let expecteds = vec![
-		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::INT(7)))})),
-		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::MINUS, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::BOOL(true)))})),
-		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression{operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::BOOL(false)))})),
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression { operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::INT(7))) })),
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression { operator: PrefixType::MINUS, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression { operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::BOOL(true))) })),
+		Statement::EXPRESSION(Expression::PREFIX(PrefixExpression { operator: PrefixType::BANG, right: Box::new(Expression::LITERAL(Literal::BOOL(false))) })),
 	];
 
 	assert_eq!(actual.statements, expecteds);
@@ -474,17 +547,87 @@ false == false;"#;
 	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 	let expecteds = vec![
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::PLUS, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::MINUS, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::MULTIPLICATION, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::DIVISION, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::GT, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::LT, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::NEQ, right: Box::new(Expression::LITERAL(Literal::INT(15)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::BOOL(true))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::BOOL(true)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::BOOL(true))), operator: InfixType::NEQ, right: Box::new(Expression::LITERAL(Literal::BOOL(false)))})),
-		Statement::EXPRESSION(Expression::INFIX(InfixExpression{left: Box::new(Expression::LITERAL(Literal::BOOL(false))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::BOOL(false)))})),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::PLUS, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::MINUS, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::MULTIPLICATION, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::DIVISION, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::GT, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::LT, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::INT(7))), operator: InfixType::NEQ, right: Box::new(Expression::LITERAL(Literal::INT(15))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::BOOL(true))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::BOOL(true))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::BOOL(true))), operator: InfixType::NEQ, right: Box::new(Expression::LITERAL(Literal::BOOL(false))) })),
+		Statement::EXPRESSION(Expression::INFIX(InfixExpression { left: Box::new(Expression::LITERAL(Literal::BOOL(false))), operator: InfixType::EQ, right: Box::new(Expression::LITERAL(Literal::BOOL(false))) })),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
+#[test]
+fn test_parse_statement_expression_if() {
+	let input = "if (x < y) { z }";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(
+			Expression::IF(
+				IfExpression {
+					condition: Box::new(
+						Expression::INFIX(
+							InfixExpression {
+								left: Box::new(Expression::IDENT(String::from("x"))),
+								operator: InfixType::LT,
+								right: Box::new(Expression::IDENT(String::from("y"))),
+							}
+						)
+					),
+					consequence: BlockStatement {
+						statements: vec![
+							Statement::EXPRESSION(Expression::IDENT(String::from("z")))
+						]
+					},
+					alternative: None,
+				}
+			)
+		),
+	];
+
+	assert_eq!(actual.statements, expecteds);
+}
+
+#[test]
+fn test_parse_statement_expression_if_else() {
+	let input = "if (x < y) { z } else { w }";
+
+	let (actual, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
+
+	let expecteds = vec![
+		Statement::EXPRESSION(
+			Expression::IF(
+				IfExpression {
+					condition: Box::new(
+						Expression::INFIX(
+							InfixExpression {
+								left: Box::new(Expression::IDENT(String::from("x"))),
+								operator: InfixType::LT,
+								right: Box::new(Expression::IDENT(String::from("y"))),
+							}
+						)
+					),
+					consequence: BlockStatement {
+						statements: vec![
+							Statement::EXPRESSION(Expression::IDENT(String::from("z")))
+						]
+					},
+					alternative: Some(BlockStatement {
+						statements: vec![
+							Statement::EXPRESSION(Expression::IDENT(String::from("w"))),
+						]
+					}),
+				}
+			)
+		),
 	];
 
 	assert_eq!(actual.statements, expecteds);
@@ -504,7 +647,7 @@ pub enum ParserError {
 	TODO,
 	INVALID_TOKEN(Token),
 	INVALID_LITERAL(String),
-	UNEXPECTED_TOKEN{want: String, got: String},
+	UNEXPECTED_TOKEN { want: String, got: String },
 	NO_IDENT(Token),
 	UNEXPECTED_STATEMENT_TOKEN(Token),
 	UNEXPECTED_PREFIX_FUNC(Token),
@@ -528,7 +671,6 @@ impl fmt::Display for ParserError {
 			ParserError::UNEXPECTED_PREFIX_FUNC(t) => write!(f, "unexpected prefix func for: {}", t),
 			ParserError::UNEXPECTED_PREFIX_TYPE(t) => write!(f, "unexpected prefix type for token: {}", t),
 			ParserError::UNEXPECTED_INFIX_TYPE(t) => write!(f, "unexpected infix type for token: {}", t),
-
 		}
 	}
 }
@@ -567,7 +709,7 @@ fn get_precedence_for_token_type(token: &Token) -> Precedence {
 
 impl Default for Parser {
 	fn default() -> Parser {
-		Parser {lexer: Lexer::default(), curr_token: Token::EOF, peek_token: Token::EOF}
+		Parser { lexer: Lexer::default(), curr_token: Token::EOF, peek_token: Token::EOF }
 	}
 }
 
@@ -591,11 +733,11 @@ impl Parser {
 	}
 
 	fn curr_token_is(&self, token: Token) -> bool {
-		return self.curr_token == token
+		return self.curr_token == token;
 	}
 
 	fn peek_token_is(&self, token: Token) -> bool {
-		return self.peek_token == token
+		return self.peek_token == token;
 	}
 
 	fn curr_precedence(&self) -> Precedence {
@@ -611,7 +753,7 @@ impl Parser {
 			self.next_token();
 			return Ok(());
 		}
-		return Err(ParserError::UNEXPECTED_TOKEN{want: format!("{}", self.peek_token), got: format!("{}", self.curr_token)})
+		return Err(ParserError::UNEXPECTED_TOKEN { want: format!("{}", self.peek_token), got: format!("{}", self.curr_token) });
 	}
 
 	//TODO: vec err arr
@@ -683,7 +825,7 @@ impl Parser {
 			self.next_token();
 		}
 
-		Ok(Statement::LET(LetStatement{name: ident.clone(), value: Expression::IDENT(String::from("TODO::LET"))}))
+		Ok(Statement::LET(LetStatement { name: ident.clone(), value: Expression::IDENT(String::from("TODO::LET")) }))
 	}
 
 	fn parse_statement_return(&mut self) -> Result<Statement, ParserError> {
@@ -694,7 +836,7 @@ impl Parser {
 			self.next_token();
 		}
 
-		Ok(Statement::RETURN(ReturnStatement{value: Expression::IDENT(String::from("TODO::RETURN"))}))
+		Ok(Statement::RETURN(ReturnStatement { value: Expression::IDENT(String::from("TODO::RETURN")) }))
 	}
 
 	fn parse_statement_expression(&mut self) -> Result<Statement, ParserError> {
@@ -707,6 +849,18 @@ impl Parser {
 		Ok(Statement::EXPRESSION(expr))
 	}
 
+	fn parse_statement_block(&mut self) -> Result<Statement, ParserError> {
+		self.next_token();
+
+		let mut statements = vec![];
+
+		while !self.curr_token_is(Token::RBRACE) && !self.curr_token_is(Token::EOF) {
+			statements.push(self.parse_statement()?);
+			self.next_token();
+		}
+
+		Ok(Statement::BLOCK(BlockStatement{statements}))
+	}
 
 	fn parse_statement_identifier(&mut self) -> Result<Expression, ParserError> {
 		match self.read_identifier() {
@@ -722,6 +876,8 @@ impl Parser {
 			Token::STRING(_) => Parser::parse_literal_string,
 			Token::BOOL(_) => Parser::parse_literal_boolean,
 			Token::BANG | Token::MINUS => Parser::parse_expression_prefix,
+			Token::LPAREN => Parser::parse_expression_grouped,
+			Token::IF => Parser::parse_expression_if,
 			_ => return None
 		})
 	}
@@ -750,7 +906,7 @@ impl Parser {
 			self.next_token();
 			left_exp = infix(self, left_exp)?;
 		}
-		
+
 		Ok(left_exp)
 	}
 
@@ -764,7 +920,7 @@ impl Parser {
 		self.next_token();
 
 		match self.parse_expression(Precedence::PREFIX) {
-			Ok(expr) => Ok(Expression::PREFIX(PrefixExpression{operator: prefix_type, right: Box::new(expr)})),
+			Ok(expr) => Ok(Expression::PREFIX(PrefixExpression { operator: prefix_type, right: Box::new(expr) })),
 			Err(e) => Err(e),
 		}
 	}
@@ -787,9 +943,57 @@ impl Parser {
 		self.next_token();
 
 		match self.parse_expression(curr_precedence) {
-			Ok(expr) => Ok(Expression::INFIX(InfixExpression{left: Box::new(left), operator: infix_type, right: Box::new(expr)})),
+			Ok(expr) => Ok(Expression::INFIX(InfixExpression { left: Box::new(left), operator: infix_type, right: Box::new(expr) })),
 			Err(e) => Err(e),
 		}
+	}
+
+	fn parse_expression_grouped(&mut self) -> Result<Expression, ParserError> {
+		self.next_token();
+
+		let expr = self.parse_expression(Precedence::LOWEST);
+		self.expect_peek(Token::RPAREN)?;
+
+		return expr;
+	}
+
+	fn parse_expression_if(&mut self) -> Result<Expression, ParserError> {
+		self.expect_peek(Token::LPAREN)?;
+
+		self.next_token();
+
+		let condition = Box::new(self.parse_expression(Precedence::LOWEST)?);
+
+		self.expect_peek(Token::RPAREN)?;
+
+		self.expect_peek(Token::LBRACE)?;
+
+		let consequence = if let Statement::BLOCK(block) = self.parse_statement_block()? {
+			block
+		} else{
+			return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()))
+		};
+
+		let mut alternative = None;
+
+		if self.peek_token_is(Token::ELSE) {
+			self.next_token();
+			self.expect_peek(Token::LBRACE)?;
+
+			alternative = if let Statement::BLOCK(block) = self.parse_statement_block()? {
+				Some(block)
+			} else{
+				return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()))
+			};
+		}
+
+		Ok(Expression::IF(
+			IfExpression{
+				condition,
+				consequence,
+				alternative,
+			}
+		))
 	}
 }
 
