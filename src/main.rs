@@ -9,15 +9,19 @@ fn main() {
 	let mut input = String::new();
 
 	loop {
+		println!("Type: ");
 		let s = match io::stdin().read_line(&mut input) {
 			Ok(_) => {
-				let mut l = Lexer::new(input.to_owned());
+				let (program, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
-				while let tok = l.next_token() {
-					if tok != Token::EOF {
-						println!("TOKEN: {}", tok);
+				if errs.len() > 0 {
+					for err in errs {
+						println!("Err: {}", err);
 					}
+					break;
 				}
+
+				println!("Output: \n{}", program.to_string());
 			}
 			Err(e) => {
 				println!("Something went wrong: {}", e);
@@ -26,41 +30,85 @@ fn main() {
 		};
 	}
 
-	println!("Hello, world!");
+	println!("Reached end of the application!");
 }
 
 //=== OBJ BEGIN ===
 
+pub const OBJ_INTEGER: &'static str = "INTEGER";
+pub const OBJ_BOOLEAN: &'static str = "BOOLEAN";
+pub const OBJ_NULL: &'static str = "NULL";
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
-	STRING(String)
+	INTEGER(usize),
+	BOOLEAN(bool),
+	NULL,
+}
+
+impl Object {
+	pub fn is_integer(&self) -> bool {
+		self.get_type() == OBJ_INTEGER
+	}
+
+	pub fn is_boolean(&self) -> bool {
+		self.get_type() == OBJ_BOOLEAN
+	}
+
+	pub fn is_null(&self) -> bool {
+		self.get_type() == OBJ_NULL
+	}
+
+	pub fn get_type(&self) -> &str {
+		match self {
+			Object::INTEGER(_) => OBJ_INTEGER,
+			Object::BOOLEAN(_) => OBJ_BOOLEAN,
+			Object::NULL => OBJ_NULL,
+		}
+	}
 }
 
 impl fmt::Display for Object {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Object::STRING(s) => s.fmt(f),
+			Object::INTEGER(i) => write!(f, "{}", i),
+			Object::BOOLEAN(i) => write!(f, "{}", i),
+			Object::NULL => write!(f, ""),
 		}
 	}
 }
 
 #[test]
-fn test_object_string() {
+fn test_objects() {
 	struct Test<'a> {
-		input: &'a str,
-		expected: Object,
+		input: Object,
+		expected: &'a str,
 	}
 
 	let tests = vec![
 		Test {
-			input: r#"hello world!"#,
-			expected: Object::STRING(String::from("hello world!")),
+			input: Object::INTEGER(7),
+			expected: "INTEGER",
+		},
+		Test {
+			input: Object::BOOLEAN(false),
+			expected: "BOOLEAN",
+		},
+		Test {
+			input: Object::NULL,
+			expected: "NULL",
 		},
 	];
 
 	for test in tests {
-		//TODO: impl evaluator
-		assert_eq!(true, true);
+		let type_name = test.input.get_type();
+		assert_eq!(type_name, test.expected);
+
+		match test.input {
+			Object::INTEGER(i) => assert_eq!(test.input.is_integer(), true),
+			Object::BOOLEAN(i) => assert_eq!(test.input.is_boolean(), true),
+			Object::NULL => assert_eq!(test.input.is_null(), true),
+		}
 	}
 }
 
