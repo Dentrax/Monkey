@@ -7,6 +7,7 @@ const PROMPT: &str = ">> ";
 
 fn main() {
 	let mut input = String::new();
+	let mut evaluator = Evaluator::new();
 
 	loop {
 		println!("Type: ");
@@ -21,7 +22,9 @@ fn main() {
 					break;
 				}
 
-				println!("Output: \n{}", program.to_string());
+				let evaluated = evaluator.eval(Node::PROGRAM(program)).unwrap();
+
+				println!("Evaluated:\n{}", evaluated);
 			}
 			Err(e) => {
 				println!("Something went wrong: {}", e);
@@ -138,6 +141,7 @@ impl Evaluator {
 			Node::EXPRESSION(e) => match e {
 				Expression::LITERAL(l) => match l {
 					Literal::INT(i) => Ok(Object::INTEGER(i)),
+					Literal::BOOL(i) => Ok(Object::BOOLEAN(i)),
 					_ => unimplemented!(),
 				}
 				_ => unimplemented!(),
@@ -184,6 +188,30 @@ fn test_eval_expression_integer() {
 	for test in tests {
 		let evaluated = test_eval(test.input).unwrap();
 		assert_eq!(evaluated, Object::INTEGER(test.expected));
+	}
+}
+
+#[test]
+fn test_eval_expression_boolean() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: bool,
+	}
+
+	let tests = vec![
+		Test {
+			input: "true",
+			expected: true,
+		},
+		Test {
+			input: "false",
+			expected: false,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::BOOLEAN(test.expected));
 	}
 }
 
