@@ -152,6 +152,7 @@ impl Evaluator {
 					_ => unimplemented!(),
 				}
 				Expression::PREFIX(p) => self.eval_expression_prefix(p),
+				Expression::INFIX(p) => self.eval_expression_infix(p),
 				_ => unimplemented!(),
 			}
 			_ => unimplemented!(),
@@ -185,12 +186,29 @@ impl Evaluator {
 			_ => unimplemented!(),
 		}
 	}
+
+	fn eval_expression_infix(&self, expr: InfixExpression) -> Result<Object, Error> {
+		let left = self.eval(Node::EXPRESSION(*expr.left))?;
+		let right = self.eval(Node::EXPRESSION(*expr.right))?;
+
+		match (left, right) {
+			(Object::INTEGER(l), Object::INTEGER(r)) => match expr.operator {
+
+				InfixType::PLUS => Ok(Object::INTEGER(l + r)),
+				InfixType::MINUS => Ok(Object::INTEGER(l - r)),
+				InfixType::MULTIPLICATION => Ok(Object::INTEGER(l * r)),
+				InfixType::DIVISION => Ok(Object::INTEGER(l / r)),
+				_ => unimplemented!(),
+			}
+			_ => unimplemented!(),
+		}
+	}
 }
 
 fn test_eval(input: &str) -> Result<Object, Error> {
 	let lexer = Lexer::new(input.to_owned());
 	let mut parser = Parser::new(lexer);
-	let mut evaluator = Evaluator::new();
+	let evaluator = Evaluator::new();
 
 	let (actual, errs) = parser.parse();
 
@@ -222,6 +240,50 @@ fn test_eval_expression_integer() {
 		Test {
 			input: "-15",
 			expected: -15,
+		},
+		Test {
+			input: "5 + 5 + 5 + 5 - 10",
+			expected: 10,
+		},
+		Test {
+			input: "2 * 2 * 2 * 2 * 2",
+			expected: 32,
+		},
+		Test {
+			input: "-50 + 100 + -50",
+			expected: 0,
+		},
+		Test {
+			input: "5 * 2 + 10",
+			expected: 20,
+		},
+		Test {
+			input: "5 + 2 * 10",
+			expected: 25,
+		},
+		Test {
+			input: "20 + 2 * -10",
+			expected: 0,
+		},
+		Test {
+			input: "50 / 2 * 2 + 10",
+			expected: 60,
+		},
+		Test {
+			input: "2 * (5 + 10)",
+			expected: 30,
+		},
+		Test {
+			input: "3 * 3 * 3 + 10",
+			expected: 37,
+		},
+		Test {
+			input: "3 * (3 * 3) + 10",
+			expected: 37,
+		},
+		Test {
+			input: "(5 + 10 * 2 + 15 / 3) * 2 + -10",
+			expected: 50,
 		},
 	];
 
