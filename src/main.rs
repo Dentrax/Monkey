@@ -140,6 +140,7 @@ impl Evaluator {
 			Node::PROGRAM(p) => self.eval_program(p),
 			Node::STATEMENT(s) => match s {
 				Statement::EXPRESSION(e) => self.eval(Node::EXPRESSION(e)),
+				Statement::BLOCK(b) => self.eval_statement_block(b),
 				_ => unimplemented!(),
 			},
 			Node::EXPRESSION(e) => match e {
@@ -153,6 +154,7 @@ impl Evaluator {
 				}
 				Expression::PREFIX(p) => self.eval_expression_prefix(p),
 				Expression::INFIX(p) => self.eval_expression_infix(p),
+				Expression::IF(p) => self.eval_expression_if(p),
 				_ => unimplemented!(),
 			}
 			_ => unimplemented!(),
@@ -162,6 +164,14 @@ impl Evaluator {
 	fn eval_program(&self, program: Program) -> Result<Object, Error> {
 		let mut result = Object::NULL;
 		for stmt in program.statements {
+			result = self.eval(Node::STATEMENT(stmt))?;
+		}
+		Ok(result)
+	}
+
+	fn eval_statement_block(&self, block: BlockStatement) -> Result<Object, Error> {
+		let mut result = OBJ_NULL;
+		for stmt in block.statements {
 			result = self.eval(Node::STATEMENT(stmt))?;
 		}
 		Ok(result)
@@ -200,53 +210,57 @@ impl Evaluator {
 				InfixType::DIVISION => Ok(Object::INTEGER(l / r)),
 
 				InfixType::LT => {
-					if l < r {
-						Ok(OBJ_TRUE)
-					} else {
-						Ok(OBJ_FALSE)
-					}
+					Ok(self.eval_expression_infix_condition(l < r))
 				},
 				InfixType::GT => {
-					if l > r {
-						Ok(OBJ_TRUE)
-					} else {
-						Ok(OBJ_FALSE)
-					}
+					Ok(self.eval_expression_infix_condition(l > r))
 				},
 				InfixType::EQ => {
-					if l == r {
-						Ok(OBJ_TRUE)
-					} else {
-						Ok(OBJ_FALSE)
-					}
+					Ok(self.eval_expression_infix_condition(l == r))
 				},
 				InfixType::NEQ => {
-					if l != r {
-						Ok(OBJ_TRUE)
-					} else {
-						Ok(OBJ_FALSE)
-					}
+					Ok(self.eval_expression_infix_condition(l != r))
 				},
 				_ => unimplemented!(),
 			},
 			(Object::BOOLEAN(l), Object::BOOLEAN(r)) => match expr.operator {
 				InfixType::EQ => {
-					if l == r {
-						Ok(OBJ_TRUE)
-					} else {
-						Ok(OBJ_FALSE)
-					}
+					Ok(self.eval_expression_infix_condition(l == r))
 				},
 				InfixType::NEQ => {
-					if l != r {
-						Ok(OBJ_TRUE)
-					} else {
-						Ok(OBJ_FALSE)
-					}
+					Ok(self.eval_expression_infix_condition(l != r))
 				},
 				_ => unimplemented!(),
 			},
 			_ => unimplemented!(),
+		}
+	}
+
+	fn eval_expression_if(&self, expr: IfExpression) -> Result<Object, Error> {
+		let condition = self.eval(Node::EXPRESSION(*expr.condition))?;
+
+		if self.eval_expression_if_truthy(&condition) {
+			return self.eval(Node::STATEMENT(Statement::BLOCK(expr.consequence)))
+		} else if let Some(alt) = expr.alternative {
+			return self.eval(Node::STATEMENT(Statement::BLOCK(alt)))
+		} else {
+			Ok(OBJ_NULL)
+		}
+	}
+
+	fn eval_expression_if_truthy(&self, obj: &Object) -> bool {
+		match obj {
+			Object::NULL => false,
+			Object::BOOLEAN(value) => *value,
+			_ => true,
+		}
+	}
+
+	fn eval_expression_infix_condition(&self, condition: bool) -> Object {
+		if condition {
+			OBJ_TRUE
+		} else {
+			OBJ_FALSE
 		}
 	}
 }
@@ -428,6 +442,50 @@ fn test_eval_expression_boolean() {
 	for test in tests {
 		let evaluated = test_eval(test.input).unwrap();
 		assert_eq!(evaluated, Object::BOOLEAN(test.expected));
+	}
+}
+
+#[test]
+fn test_eval_expression_if_else() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: "if (true) { 10 }",
+			expected: Object::INTEGER(10),
+		},
+		Test {
+			input: "if (false) { 10 }",
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: "if (1) { 10 }",
+			expected: Object::INTEGER(10),
+		},
+		Test {
+			input: "if (1 < 2) { 10 }",
+			expected: Object::INTEGER(10),
+		},
+		Test {
+			input: "if (1 > 2) { 10 }",
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: "if (1 > 2) { 10 } else { 20 }",
+			expected: Object::INTEGER(20),
+		},
+		Test {
+			input: "if (1 < 2) { 10 } else { 20 }",
+			expected: Object::INTEGER(10),
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, test.expected);
 	}
 }
 
