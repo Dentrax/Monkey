@@ -38,10 +38,11 @@ fn main() {
 
 //=== OBJ BEGIN ===
 
-pub const OBJ_INTEGER: &'static str = "INTEGER";
-pub const OBJ_BOOLEAN: &'static str = "BOOLEAN";
-pub const OBJ_NULL: &'static str = "NULL";
+pub const STR_INTEGER: &'static str = "INTEGER";
+pub const STR_BOOLEAN: &'static str = "BOOLEAN";
+pub const STR_NULL: &'static str = "NULL";
 
+pub const OBJ_NULL: Object = Object::NULL;
 pub const OBJ_TRUE: Object = Object::BOOLEAN(true);
 pub const OBJ_FALSE: Object = Object::BOOLEAN(false);
 
@@ -54,22 +55,22 @@ pub enum Object {
 
 impl Object {
 	pub fn is_integer(&self) -> bool {
-		self.get_type() == OBJ_INTEGER
+		self.get_type() == STR_INTEGER
 	}
 
 	pub fn is_boolean(&self) -> bool {
-		self.get_type() == OBJ_BOOLEAN
+		self.get_type() == STR_BOOLEAN
 	}
 
 	pub fn is_null(&self) -> bool {
-		self.get_type() == OBJ_NULL
+		self.get_type() == STR_NULL
 	}
 
 	pub fn get_type(&self) -> &str {
 		match self {
-			Object::INTEGER(_) => OBJ_INTEGER,
-			Object::BOOLEAN(_) => OBJ_BOOLEAN,
-			Object::NULL => OBJ_NULL,
+			Object::INTEGER(_) => STR_INTEGER,
+			Object::BOOLEAN(_) => STR_BOOLEAN,
+			Object::NULL => STR_NULL,
 		}
 	}
 }
@@ -150,6 +151,7 @@ impl Evaluator {
 					},
 					_ => unimplemented!(),
 				}
+				Expression::PREFIX(p) => self.eval_expression_prefix(p),
 				_ => unimplemented!(),
 			}
 			_ => unimplemented!(),
@@ -162,6 +164,22 @@ impl Evaluator {
 			result = self.eval(Node::STATEMENT(stmt))?;
 		}
 		Ok(result)
+	}
+
+	fn eval_expression_prefix(&self, expr: PrefixExpression) -> Result<Object, Error> {
+		let right = self.eval(Node::EXPRESSION(*expr.right))?;
+
+		match expr.operator {
+			PrefixType::BANG => match right {
+				Object::BOOLEAN(b) => match b {
+					true => Ok(OBJ_FALSE),
+					false => Ok(OBJ_TRUE)
+				},
+				Object::NULL => Ok(OBJ_NULL),
+				_ => Ok(OBJ_FALSE),
+			},
+			_ => unimplemented!(),
+		}
 	}
 }
 
@@ -212,6 +230,46 @@ fn test_eval_expression_boolean() {
 		Test {
 			input: "false",
 			expected: false,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::BOOLEAN(test.expected));
+	}
+}
+
+#[test]
+fn test_eval_operator_bang() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: bool,
+	}
+
+	let tests = vec![
+		Test {
+			input: "!true",
+			expected: false,
+		},
+		Test {
+			input: "!false",
+			expected: true,
+		},
+		Test {
+			input: "!7",
+			expected: false,
+		},
+		Test {
+			input: "!!true",
+			expected: true,
+		},
+		Test {
+			input: "!!false",
+			expected: false,
+		},
+		Test {
+			input: "!!7",
+			expected: true,
 		},
 	];
 
