@@ -115,6 +115,82 @@ fn test_objects() {
 
 //=== OBJ END ====
 
+
+
+//=== EVAL START ====
+
+pub struct Evaluator {
+
+}
+
+impl Evaluator {
+	pub fn new() -> Self {
+		Evaluator {}
+	}
+
+	fn eval(&self, node: Node) -> Result<Object, Error> {
+		match node {
+			Node::PROGRAM(p) => self.eval_program(p),
+			Node::STATEMENT(s) => match s {
+				Statement::EXPRESSION(e) => self.eval(Node::EXPRESSION(e)),
+				_ => unimplemented!(),
+			},
+			Node::EXPRESSION(e) => match e {
+				Expression::LITERAL(l) => match l {
+					Literal::INT(i) => Ok(Object::INTEGER(i)),
+					_ => unimplemented!(),
+				}
+				_ => unimplemented!(),
+			}
+			_ => unimplemented!(),
+		}
+	}
+
+	fn eval_program(&self, program: Program) -> Result<Object, Error> {
+		let mut result = Object::NULL;
+		for stmt in program.statements {
+			result = self.eval(Node::STATEMENT(stmt))?;
+		}
+		Ok(result)
+	}
+}
+
+fn test_eval(input: &str) -> Result<Object, Error> {
+	let lexer = Lexer::new(input.to_owned());
+	let mut parser = Parser::new(lexer);
+	let mut evaluator = Evaluator::new();
+
+	let (actual, errs) = parser.parse();
+
+	assert_eq!(0, errs.len());
+
+	Ok(evaluator.eval(Node::PROGRAM(actual)))?
+}
+
+#[test]
+fn test_eval_expression_integer() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: usize,
+	}
+
+	let tests = vec![
+		Test {
+			input: "5",
+			expected: 5,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::INTEGER(test.expected));
+	}
+}
+
+//=== EVAL END ====
+
+
+
 //=== AST BEGIN ===
 
 pub enum Node {
