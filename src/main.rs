@@ -42,6 +42,9 @@ pub const OBJ_INTEGER: &'static str = "INTEGER";
 pub const OBJ_BOOLEAN: &'static str = "BOOLEAN";
 pub const OBJ_NULL: &'static str = "NULL";
 
+pub const OBJ_TRUE: Object = Object::BOOLEAN(true);
+pub const OBJ_FALSE: Object = Object::BOOLEAN(false);
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
 	INTEGER(usize),
@@ -141,7 +144,10 @@ impl Evaluator {
 			Node::EXPRESSION(e) => match e {
 				Expression::LITERAL(l) => match l {
 					Literal::INT(i) => Ok(Object::INTEGER(i)),
-					Literal::BOOL(i) => Ok(Object::BOOLEAN(i)),
+					Literal::BOOL(i) => match i {
+						true => Ok(OBJ_TRUE),
+						false => Ok(OBJ_FALSE)
+					},
 					_ => unimplemented!(),
 				}
 				_ => unimplemented!(),
