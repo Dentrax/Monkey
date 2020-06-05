@@ -7,7 +7,7 @@ const PROMPT: &str = ">> ";
 
 fn main() {
 	let mut input = String::new();
-	let mut evaluator = Evaluator::new();
+	let evaluator = Evaluator::new();
 
 	loop {
 		println!("Type: ");
@@ -198,8 +198,54 @@ impl Evaluator {
 				InfixType::MINUS => Ok(Object::INTEGER(l - r)),
 				InfixType::MULTIPLICATION => Ok(Object::INTEGER(l * r)),
 				InfixType::DIVISION => Ok(Object::INTEGER(l / r)),
+
+				InfixType::LT => {
+					if l < r {
+						Ok(OBJ_TRUE)
+					} else {
+						Ok(OBJ_FALSE)
+					}
+				},
+				InfixType::GT => {
+					if l > r {
+						Ok(OBJ_TRUE)
+					} else {
+						Ok(OBJ_FALSE)
+					}
+				},
+				InfixType::EQ => {
+					if l == r {
+						Ok(OBJ_TRUE)
+					} else {
+						Ok(OBJ_FALSE)
+					}
+				},
+				InfixType::NEQ => {
+					if l != r {
+						Ok(OBJ_TRUE)
+					} else {
+						Ok(OBJ_FALSE)
+					}
+				},
 				_ => unimplemented!(),
-			}
+			},
+			(Object::BOOLEAN(l), Object::BOOLEAN(r)) => match expr.operator {
+				InfixType::EQ => {
+					if l == r {
+						Ok(OBJ_TRUE)
+					} else {
+						Ok(OBJ_FALSE)
+					}
+				},
+				InfixType::NEQ => {
+					if l != r {
+						Ok(OBJ_TRUE)
+					} else {
+						Ok(OBJ_FALSE)
+					}
+				},
+				_ => unimplemented!(),
+			},
 			_ => unimplemented!(),
 		}
 	}
@@ -308,6 +354,74 @@ fn test_eval_expression_boolean() {
 		Test {
 			input: "false",
 			expected: false,
+		},
+		Test {
+			input: "1 < 2",
+			expected: true,
+		},
+		Test {
+			input: "1 > 2",
+			expected: false,
+		},
+		Test {
+			input: "1 < 1",
+			expected: false,
+		},
+		Test {
+			input: "1 > 1",
+			expected: false,
+		},
+		Test {
+			input: "1 == 1",
+			expected: true,
+		},
+		Test {
+			input: "1 != 1",
+			expected: false,
+		},
+		Test {
+			input: "1 == 2",
+			expected: false,
+		},
+		Test {
+			input: "1 != 2",
+			expected: true,
+		},
+		Test {
+			input: "true == true",
+			expected: true,
+		},
+		Test {
+			input: "false == false",
+			expected: true,
+		},
+		Test {
+			input: "true == false",
+			expected: false,
+		},
+		Test {
+			input: "true != false",
+			expected: true,
+		},
+		Test {
+			input: "false != true",
+			expected: true,
+		},
+		Test {
+			input: "(1 < 2) == true",
+			expected: true,
+		},
+		Test {
+			input: "(1 < 2) == false",
+			expected: false,
+		},
+		Test {
+			input: "(1 > 2) == true",
+			expected: false,
+		},
+		Test {
+			input: "(1 > 2) == false",
+			expected: true,
 		},
 	];
 
