@@ -48,7 +48,7 @@ pub const OBJ_FALSE: Object = Object::BOOLEAN(false);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
-	INTEGER(usize),
+	INTEGER(isize),
 	BOOLEAN(bool),
 	NULL,
 }
@@ -178,6 +178,10 @@ impl Evaluator {
 				Object::NULL => Ok(OBJ_NULL),
 				_ => Ok(OBJ_FALSE),
 			},
+			PrefixType::MINUS => match right {
+				Object::INTEGER(i) => Ok(Object::INTEGER(-i)),
+				_ => unimplemented!(),
+			},
 			_ => unimplemented!(),
 		}
 	}
@@ -199,13 +203,25 @@ fn test_eval(input: &str) -> Result<Object, Error> {
 fn test_eval_expression_integer() {
 	struct Test<'a> {
 		input: &'a str,
-		expected: usize,
+		expected: isize,
 	}
 
 	let tests = vec![
 		Test {
-			input: "5",
-			expected: 5,
+			input: "7",
+			expected: 7,
+		},
+		Test {
+			input: "-7",
+			expected: -7,
+		},
+		Test {
+			input: "15",
+			expected: 15,
+		},
+		Test {
+			input: "-15",
+			expected: -15,
 		},
 	];
 
@@ -293,7 +309,7 @@ pub enum Node {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
-	INT(usize),
+	INT(isize),
 	STRING(String),
 	BOOL(bool),
 }
@@ -1784,7 +1800,7 @@ impl Lexer {
 					return to;
 				} else if Lexer::is_digit(self.ch) {
 					let id = self.read_number();
-					return Token::INT(id.parse::<usize>().unwrap());
+					return Token::INT(id.parse::<isize>().unwrap());
 				}
 				t = Token::ILLEGAL(self.ch);
 			}
@@ -1827,7 +1843,7 @@ pub enum Token {
 	LF,
 
 	IDENT(String),
-	INT(usize),
+	INT(isize),
 	BOOL(bool),
 	STRING(String),
 
