@@ -40,6 +40,7 @@ fn main() {
 
 pub const STR_INTEGER: &'static str = "INTEGER";
 pub const STR_BOOLEAN: &'static str = "BOOLEAN";
+pub const STR_RETURN: &'static str = "RETURN";
 pub const STR_NULL: &'static str = "NULL";
 
 pub const OBJ_NULL: Object = Object::NULL;
@@ -50,6 +51,7 @@ pub const OBJ_FALSE: Object = Object::BOOLEAN(false);
 pub enum Object {
 	INTEGER(isize),
 	BOOLEAN(bool),
+	RETURN(Box<Object>),
 	NULL,
 }
 
@@ -62,6 +64,10 @@ impl Object {
 		self.get_type() == STR_BOOLEAN
 	}
 
+	pub fn is_return(&self) -> bool {
+		self.get_type() == STR_RETURN
+	}
+
 	pub fn is_null(&self) -> bool {
 		self.get_type() == STR_NULL
 	}
@@ -70,6 +76,7 @@ impl Object {
 		match self {
 			Object::INTEGER(_) => STR_INTEGER,
 			Object::BOOLEAN(_) => STR_BOOLEAN,
+			Object::RETURN(_) => STR_RETURN,
 			Object::NULL => STR_NULL,
 		}
 	}
@@ -80,6 +87,7 @@ impl fmt::Display for Object {
 		match self {
 			Object::INTEGER(i) => write!(f, "{}", i),
 			Object::BOOLEAN(i) => write!(f, "{}", i),
+			Object::RETURN(r) => write!(f, "{}", r),
 			Object::NULL => write!(f, ""),
 		}
 	}
@@ -102,6 +110,10 @@ fn test_objects() {
 			expected: "BOOLEAN",
 		},
 		Test {
+			input: Object::RETURN(Box::new(OBJ_NULL)),
+			expected: "RETURN",
+		},
+		Test {
 			input: Object::NULL,
 			expected: "NULL",
 		},
@@ -114,6 +126,7 @@ fn test_objects() {
 		match test.input {
 			Object::INTEGER(i) => assert_eq!(test.input.is_integer(), true),
 			Object::BOOLEAN(i) => assert_eq!(test.input.is_boolean(), true),
+			Object::RETURN(_) => assert_eq!(test.input.is_return(), true),
 			Object::NULL => assert_eq!(test.input.is_null(), true),
 		}
 	}
@@ -141,6 +154,7 @@ impl Evaluator {
 			Node::STATEMENT(s) => match s {
 				Statement::EXPRESSION(e) => self.eval(Node::EXPRESSION(e)),
 				Statement::BLOCK(b) => self.eval_statement_block(b),
+				Statement::RETURN(r) => self.eval_statement_return(r),
 				_ => unimplemented!(),
 			},
 			Node::EXPRESSION(e) => match e {
@@ -165,6 +179,11 @@ impl Evaluator {
 		let mut result = Object::NULL;
 		for stmt in program.statements {
 			result = self.eval(Node::STATEMENT(stmt))?;
+
+			if let Object::RETURN(value) = result {
+				return Ok(*value);
+			}
+
 		}
 		Ok(result)
 	}
@@ -173,8 +192,17 @@ impl Evaluator {
 		let mut result = OBJ_NULL;
 		for stmt in block.statements {
 			result = self.eval(Node::STATEMENT(stmt))?;
+
+			if let Object::RETURN(value) = result {
+				return Ok(Object::RETURN(value));
+			}
 		}
 		Ok(result)
+	}
+
+	fn eval_statement_return(&self, ret: ReturnStatement) -> Result<Object, Error> {
+		let value = self.eval(Node::EXPRESSION(ret.value))?;
+		Ok(Object::RETURN(Box::new(value)))
 	}
 
 	fn eval_expression_prefix(&self, expr: PrefixExpression) -> Result<Object, Error> {
@@ -480,6 +508,38 @@ fn test_eval_expression_if_else() {
 		Test {
 			input: "if (1 < 2) { 10 } else { 20 }",
 			expected: Object::INTEGER(10),
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, test.expected);
+	}
+}
+
+#[test]
+fn test_eval_statement_return() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: "return 10;",
+			expected: Object::INTEGER(10),
+		},
+		Test {
+			input: "return 11; 9;",
+			expected: Object::INTEGER(11),
+		},
+		Test {
+			input: "return 2 * 6; 9;",
+			expected: Object::INTEGER(12),
+		},
+		Test {
+			input: "9; return 2 * 7; 9;",
+			expected: Object::INTEGER(14),
 		},
 	];
 
