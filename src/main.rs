@@ -2,11 +2,15 @@ use std::{fmt};
 use std::io;
 use std::fmt::{Error, Formatter};
 use crate::Expression::LITERAL;
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 const PROMPT: &str = ">> ";
 
 fn main() {
 	let mut input = String::new();
+	let evaluator = Evaluator::new();
 
 	loop {
 		input.clear();
@@ -15,14 +19,14 @@ fn main() {
 
 		let s = match io::stdin().read_line(&mut input) {
 			Ok(_) => {
-				let evaluator = Evaluator::new();
+
 				let (program, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 				if errs.len() > 0 {
 					for err in errs {
 						println!("ParserErr: {}", err);
 					}
-					break;
+					continue;
 				}
 
 				match evaluator.eval(Node::PROGRAM(program)) {
@@ -161,6 +165,41 @@ fn test_objects() {
 //=== OBJ END ====
 
 
+//=== ENVIRONMENT BEGIN ===
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Environment {
+	store: HashMap<String, Object>
+}
+
+impl Default for Environment {
+	fn default() -> Environment {
+		Environment { store: HashMap::new() }
+	}
+}
+
+impl Environment {
+
+	fn new() -> Self {
+		return Environment::default();
+	}
+
+	fn get(&self, key: &str) -> Option<Object> {
+		match self.store.get(key) {
+			Some(obj) => {
+				Some(obj.clone())
+			}
+			None => None,
+		}
+	}
+
+	fn set(&mut self, key: String, obj: &Object) {
+		self.store.insert(key, obj.clone());
+	}
+}
+
+//=== ENVIRONMENT END ===
+
 
 //=== EVAL START ====
 
@@ -168,6 +207,8 @@ fn test_objects() {
 pub enum EvalError {
 	UNKNOWN_OPERATOR_PREFIX(Object, PrefixType),
 	UNKNOWN_OPERATOR_INFIX(Object, InfixType, Object),
+	UNKNOWN_EXPRESSION(Expression),
+	UNKNOWN_IDENTIFIER(String),
 	TYPE_MISMATCH(Object, InfixType, Object)
 }
 
@@ -180,6 +221,12 @@ impl fmt::Display for EvalError {
 			EvalError::UNKNOWN_OPERATOR_INFIX(l, i, r) => {
 				write!(f, "unknown operator: {} {} {}", l.get_type(), i, r.get_type())
 			},
+			EvalError::UNKNOWN_EXPRESSION(e) => {
+				write!(f, "expression not found: {}", e)
+			}
+			EvalError::UNKNOWN_IDENTIFIER(e) => {
+				write!(f, "identifier not found: {}", e)
+			}
 			EvalError::TYPE_MISMATCH(l, t, r) => {
 				write!(f, "type mismatch: {} {} {}", l.get_type(), t, r.get_type())
 			}
@@ -188,12 +235,14 @@ impl fmt::Display for EvalError {
 }
 
 pub struct Evaluator {
-
+	environment: Rc<RefCell<Environment>>
 }
 
 impl Evaluator {
 	pub fn new() -> Self {
-		Evaluator {}
+		Evaluator {
+			environment: Rc::new(RefCell::new(Environment::default()))
+		}
 	}
 
 	fn eval(&self, node: Node) -> Result<Object, EvalError> {
@@ -203,6 +252,7 @@ impl Evaluator {
 				Statement::EXPRESSION(e) => self.eval(Node::EXPRESSION(e)),
 				Statement::BLOCK(b) => self.eval_statement_block(b),
 				Statement::RETURN(r) => self.eval_statement_return(r),
+				Statement::LET(l) => self.eval_statement_let(l),
 				_ => unimplemented!(),
 			},
 			Node::EXPRESSION(e) => match e {
@@ -217,7 +267,8 @@ impl Evaluator {
 				Expression::PREFIX(p) => self.eval_expression_prefix(p),
 				Expression::INFIX(p) => self.eval_expression_infix(p),
 				Expression::IF(p) => self.eval_expression_if(p),
-				_ => unimplemented!(),
+				Expression::IDENT(i) => self.eval_expression_ident(&i),
+				_ => Err(EvalError::UNKNOWN_EXPRESSION(e))
 			}
 			_ => unimplemented!(),
 		}
@@ -246,6 +297,13 @@ impl Evaluator {
 			}
 		}
 		Ok(result)
+	}
+
+	fn eval_statement_let(&self, stmt: LetStatement) -> Result<Object, EvalError> {
+		let value = self.eval(Node::EXPRESSION(stmt.value))?;
+		self.environment.borrow_mut().set(stmt.name, &value);
+
+		Ok(value)
 	}
 
 	fn eval_statement_return(&self, ret: ReturnStatement) -> Result<Object, EvalError> {
@@ -340,6 +398,16 @@ impl Evaluator {
 		} else {
 			OBJ_FALSE
 		}
+	}
+
+	fn eval_expression_ident(&self, ident: &String) -> Result<Object, EvalError> {
+		match self.environment.borrow_mut().get(&ident) {
+			Some(value) => Ok(value),
+			None => {
+				Err(EvalError::UNKNOWN_IDENTIFIER(ident.clone()))
+			}
+		}
+
 	}
 }
 
@@ -681,6 +749,10 @@ fn test_eval_handle_error() {
 			input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }",
 			expected: "unknown operator: BOOLEAN + BOOLEAN",
 		},
+		Test {
+			input: "foobar",
+			expected: "identifier not found: foobar",
+		},
 	];
 
 	for test in tests {
@@ -692,6 +764,38 @@ fn test_eval_handle_error() {
 				assert_eq!(e.to_string(), test.expected);
 			}
 		}
+	}
+}
+
+#[test]
+fn test_eval_statement_let() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: "let a = 7; a;",
+			expected: Object::INTEGER(7),
+		},
+		Test {
+			input: "let a = 7 * 7; a;",
+			expected: Object::INTEGER(49),
+		},
+		Test {
+			input: "let a = 7; let b = a; b;",
+			expected: Object::INTEGER(7),
+		},
+		Test {
+			input: "let a = 7; let b = a; let c = a + b + 7; c;",
+			expected: Object::INTEGER(21),
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, test.expected);
 	}
 }
 
