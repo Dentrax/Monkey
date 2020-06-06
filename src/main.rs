@@ -1,7 +1,6 @@
 use std::{fmt};
 use std::io;
 use std::fmt::{Error, Formatter};
-use crate::Expression::LITERAL;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -57,6 +56,7 @@ fn main() {
 pub const STR_FUNCTION: &'static str = "FUNCTION";
 pub const STR_INTEGER: &'static str = "INTEGER";
 pub const STR_BOOLEAN: &'static str = "BOOLEAN";
+pub const STR_STRING: &'static str = "STRING";
 pub const STR_RETURN: &'static str = "RETURN";
 pub const STR_ERROR: &'static str = "ERROR";
 pub const STR_NULL: &'static str = "NULL";
@@ -85,6 +85,7 @@ pub enum Object {
 	FUNCTION(Function),
 	INTEGER(isize),
 	BOOLEAN(bool),
+	STRING(String),
 	RETURN(Box<Object>),
 	ERROR(String),
 	NULL,
@@ -101,6 +102,10 @@ impl Object {
 
 	pub fn is_boolean(&self) -> bool {
 		self.get_type() == STR_BOOLEAN
+	}
+
+	pub fn is_string(&self) -> bool {
+		self.get_type() == STR_STRING
 	}
 
 	pub fn is_return(&self) -> bool {
@@ -120,6 +125,7 @@ impl Object {
 			Object::FUNCTION(_) => STR_FUNCTION,
 			Object::INTEGER(_) => STR_INTEGER,
 			Object::BOOLEAN(_) => STR_BOOLEAN,
+			Object::STRING(_) => STR_STRING,
 			Object::RETURN(_) => STR_RETURN,
 			Object::ERROR(_) => STR_ERROR,
 			Object::NULL => STR_NULL,
@@ -133,6 +139,7 @@ impl fmt::Display for Object {
 			Object::FUNCTION(func) => func.fmt(f),
 			Object::INTEGER(i) => write!(f, "{}", i),
 			Object::BOOLEAN(i) => write!(f, "{}", i),
+			Object::STRING(s) => write!(f, "{}", s),
 			Object::RETURN(r) => write!(f, "{}", r),
 			Object::ERROR(e) => write!(f, "{}", e),
 			Object::NULL => write!(f, ""),
@@ -161,8 +168,8 @@ fn test_objects() {
 			expected: "RETURN",
 		},
 		Test {
-			input: Object::ERROR(String::from("")),
-			expected: "ERROR",
+			input: Object::STRING(String::from("")),
+			expected: "STRING",
 		},
 		Test {
 			input: Object::FUNCTION(Function{parameters: vec![], body: BlockStatement{statements: vec![]}, env: Rc::new(RefCell::new(Environment::new()))}),
@@ -182,6 +189,7 @@ fn test_objects() {
 			Object::FUNCTION(_) => assert_eq!(test.input.is_function(), true),
 			Object::INTEGER(_) => assert_eq!(test.input.is_integer(), true),
 			Object::BOOLEAN(_) => assert_eq!(test.input.is_boolean(), true),
+			Object::STRING(_) => assert_eq!(test.input.is_string(), true),
 			Object::RETURN(_) => assert_eq!(test.input.is_return(), true),
 			Object::ERROR(_) => assert_eq!(test.input.is_error(), true),
 			Object::NULL => assert_eq!(test.input.is_null(), true),
@@ -304,6 +312,7 @@ impl Evaluator {
 						true => Ok(OBJ_TRUE),
 						false => Ok(OBJ_FALSE)
 					},
+					Literal::STRING(s) => Ok(Object::STRING(s)),
 					_ => unimplemented!(),
 				}
 				Expression::PREFIX(p) => self.eval_expression_prefix(p),
@@ -411,6 +420,9 @@ impl Evaluator {
 				},
 				_ => Err(EvalError::UNKNOWN_OPERATOR_INFIX(Object::BOOLEAN(l), expr.operator, Object::BOOLEAN(r)))
 			},
+			(Object::STRING(l), Object::STRING(r)) => {
+				Ok(self.eval_expression_infix_string(l, expr.operator, r)?)
+			}
 			(l, r) => Err(EvalError::TYPE_MISMATCH(l, expr.operator, r)),
 			_ => unimplemented!(),
 		}
@@ -442,6 +454,25 @@ impl Evaluator {
 		} else {
 			OBJ_FALSE
 		}
+	}
+
+	fn eval_expression_infix_string(&self, l: String, operator: InfixType, r: String) -> Result<Object, EvalError> {
+		let result = match operator {
+			InfixType::PLUS => {
+				let mut str = l.to_owned();
+				str.push_str(&r.to_owned());
+				Object::STRING(str)
+			},
+			InfixType::EQ => {
+				self.eval_expression_infix_condition(l == r)
+			}
+			InfixType::NEQ => {
+				self.eval_expression_infix_condition(l != r)
+			}
+			_ => return Err(EvalError::UNKNOWN_OPERATOR_INFIX(Object::STRING(l), operator, Object::STRING(r)))
+		};
+
+		Ok(result)
 	}
 
 	fn eval_expression_ident(&self, ident: &String) -> Result<Object, EvalError> {
@@ -483,14 +514,6 @@ impl Evaluator {
 
 		Err(EvalError::UNSUPPORTED_OBJECT(func))
 	}
-
-	// fn extend_function_env(func: &Function, args: &[Object]) -> Result<Environment, EvalError> {
-	// 	let mut env = Environment::new_enclosed(func.env.clone());
-	// 	for (i, param) in func.parameters.iter().enumerate() {
-	// 		env.set(param.to_string(), args.get(i).unwrap())
-	// 	}
-	// 	Ok(env)
-	// }
 
 	fn eval_expressions(&mut self, exprs: Vec<Expression>) -> Result<Vec<Object>, EvalError> {
 		let mut results = vec![];
@@ -684,6 +707,62 @@ fn test_eval_expression_boolean() {
 }
 
 #[test]
+fn test_eval_expression_string() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: String,
+	}
+
+	let tests = vec![
+		Test {
+			input: r#""Hello World!""#,
+			expected: String::from("Hello World!"),
+		},
+		Test {
+			input: r#""Hello" + " " + "World!""#,
+			expected: String::from("Hello World!"),
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::STRING(test.expected));
+	}
+}
+
+#[test]
+fn test_eval_expression_string_equality() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: bool,
+	}
+
+	let tests = vec![
+		Test {
+			input: r#""foo" == "foo""#,
+			expected: true,
+		},
+		Test {
+			input: r#""foo" != "foo""#,
+			expected: false,
+		},
+		Test {
+			input: r#""foo" == "bar""#,
+			expected: false,
+		},
+		Test {
+			input: r#""foo" != "bar""#,
+			expected: true,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::BOOLEAN(test.expected));
+	}
+}
+
+#[test]
 fn test_eval_expression_if_else() {
 	struct Test<'a> {
 		input: &'a str,
@@ -846,6 +925,10 @@ fn test_eval_handle_error() {
 		Test {
 			input: "let newAdder = fn(x) { fn(y) { x + y } }; let addTwo = newAdder(2); x",
 			expected: "identifier not found: x",
+		},
+		Test {
+			input: r#""Hello" - "World""#,
+			expected: "unknown operator: STRING - STRING",
 		},
 	];
 
