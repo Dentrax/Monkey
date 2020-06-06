@@ -4,6 +4,7 @@ use std::fmt::{Error, Formatter};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::fs::read;
 
 const PROMPT: &str = ">> ";
 
@@ -18,7 +19,6 @@ fn main() {
 
 		let s = match io::stdin().read_line(&mut input) {
 			Ok(_) => {
-
 				let (program, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 				if errs.len() > 0 {
@@ -31,10 +31,10 @@ fn main() {
 				match evaluator.eval(Node::PROGRAM(program)) {
 					Ok(o) => {
 						match o {
-							Object::NULL => {},
+							Object::NULL => {}
 							_ => println!("Evaluated:\n{}", o)
 						}
-					},
+					}
 					Err(e) => {
 						println!("EvalError: {}", e);
 						continue;
@@ -54,6 +54,7 @@ fn main() {
 //=== OBJ BEGIN ===
 
 pub const STR_FUNCTION: &'static str = "FUNCTION";
+pub const STR_BUILTIN: &'static str = "BUILTIN";
 pub const STR_INTEGER: &'static str = "INTEGER";
 pub const STR_BOOLEAN: &'static str = "BOOLEAN";
 pub const STR_STRING: &'static str = "STRING";
@@ -69,7 +70,7 @@ pub const OBJ_FALSE: Object = Object::BOOLEAN(false);
 pub struct Function {
 	parameters: Vec<String>,
 	body: BlockStatement,
-	env: Rc<RefCell<Environment>>
+	env: Rc<RefCell<Environment>>,
 }
 
 impl fmt::Display for Function {
@@ -83,6 +84,7 @@ impl fmt::Display for Function {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
 	FUNCTION(Function),
+	BUILTIN(Builtin),
 	INTEGER(isize),
 	BOOLEAN(bool),
 	STRING(String),
@@ -94,6 +96,10 @@ pub enum Object {
 impl Object {
 	pub fn is_function(&self) -> bool {
 		self.get_type() == STR_FUNCTION
+	}
+
+	pub fn is_builtin(&self) -> bool {
+		self.get_type() == STR_BUILTIN
 	}
 
 	pub fn is_integer(&self) -> bool {
@@ -123,6 +129,7 @@ impl Object {
 	pub fn get_type(&self) -> &str {
 		match self {
 			Object::FUNCTION(_) => STR_FUNCTION,
+			Object::BUILTIN(_) => STR_BUILTIN,
 			Object::INTEGER(_) => STR_INTEGER,
 			Object::BOOLEAN(_) => STR_BOOLEAN,
 			Object::STRING(_) => STR_STRING,
@@ -137,6 +144,7 @@ impl fmt::Display for Object {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Object::FUNCTION(func) => func.fmt(f),
+			Object::BUILTIN(b) => b.fmt(f),
 			Object::INTEGER(i) => write!(f, "{}", i),
 			Object::BOOLEAN(i) => write!(f, "{}", i),
 			Object::STRING(s) => write!(f, "{}", s),
@@ -160,6 +168,10 @@ fn test_objects() {
 			expected: "INTEGER",
 		},
 		Test {
+			input: Object::BUILTIN(Builtin::LEN),
+			expected: "BUILTIN",
+		},
+		Test {
 			input: Object::BOOLEAN(false),
 			expected: "BOOLEAN",
 		},
@@ -172,7 +184,7 @@ fn test_objects() {
 			expected: "STRING",
 		},
 		Test {
-			input: Object::FUNCTION(Function{parameters: vec![], body: BlockStatement{statements: vec![]}, env: Rc::new(RefCell::new(Environment::new()))}),
+			input: Object::FUNCTION(Function { parameters: vec![], body: BlockStatement { statements: vec![] }, env: Rc::new(RefCell::new(Environment::new())) }),
 			expected: "FUNCTION",
 		},
 		Test {
@@ -187,6 +199,7 @@ fn test_objects() {
 
 		match test.input {
 			Object::FUNCTION(_) => assert_eq!(test.input.is_function(), true),
+			Object::BUILTIN(_) => assert_eq!(test.input.is_builtin(), true),
 			Object::INTEGER(_) => assert_eq!(test.input.is_integer(), true),
 			Object::BOOLEAN(_) => assert_eq!(test.input.is_boolean(), true),
 			Object::STRING(_) => assert_eq!(test.input.is_string(), true),
@@ -201,12 +214,57 @@ fn test_objects() {
 //=== OBJ END ====
 
 
+//=== BUILTIN BEGIN ====
+
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Builtin {
+	LEN
+}
+
+impl fmt::Display for Builtin {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		match self {
+			Builtin::LEN => write!(f, "len")
+		}
+	}
+}
+
+impl Builtin {
+	fn lookup(builtin: String) -> Option<Self> {
+		match builtin.as_str() {
+			"len" => Some(Builtin::LEN),
+			_ => None
+		}
+	}
+
+	pub fn apply(&self, args: Vec<Object>) -> Result<Object, EvalError> {
+		match self {
+			Builtin::LEN => builtin_len(&args),
+		}
+	}
+}
+
+fn builtin_len(args: &[Object]) -> Result<Object, EvalError> {
+	if args.len() != 1 {
+		return Err(EvalError::BUILTIN_ERROR_LEN(args.len()))
+	}
+
+	match &args[0] {
+		Object::STRING(str) => Ok(Object::INTEGER(str.len() as isize)),
+		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::LEN, args[0].clone()))
+	}
+}
+
+//=== BUILTIN END ====
+
+
 //=== ENVIRONMENT BEGIN ===
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
 	store: HashMap<String, Object>,
-	outer: Option<Rc<RefCell<Environment>>>
+	outer: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Default for Environment {
@@ -216,7 +274,6 @@ impl Default for Environment {
 }
 
 impl Environment {
-
 	fn new() -> Self {
 		return Environment::default();
 	}
@@ -256,7 +313,10 @@ pub enum EvalError {
 	UNKNOWN_EXPRESSION(Expression),
 	UNKNOWN_IDENTIFIER(String),
 	TYPE_MISMATCH(Object, InfixType, Object),
-	UNSUPPORTED_OBJECT(Object)
+	UNSUPPORTED_OBJECT(Object),
+	UNKNOWN_BUILTIN(String),
+	BUILTIN_ERROR_LEN(usize),
+	UNSUPPORTED_BUILTIN_USAGE(Builtin, Object),
 }
 
 impl fmt::Display for EvalError {
@@ -264,10 +324,10 @@ impl fmt::Display for EvalError {
 		match self {
 			EvalError::UNKNOWN_OPERATOR_PREFIX(o, p) => {
 				write!(f, "unknown operator: {}{}", p, o.get_type())
-			},
+			}
 			EvalError::UNKNOWN_OPERATOR_INFIX(l, i, r) => {
 				write!(f, "unknown operator: {} {} {}", l.get_type(), i, r.get_type())
-			},
+			}
 			EvalError::UNKNOWN_EXPRESSION(e) => {
 				write!(f, "expression not found: {}", e)
 			}
@@ -279,6 +339,15 @@ impl fmt::Display for EvalError {
 			}
 			EvalError::UNSUPPORTED_OBJECT(o) => {
 				write!(f, "unsupported object: {}", o.get_type())
+			}
+			EvalError::UNKNOWN_BUILTIN(s) => {
+				write!(f, "unknown builtin {}", s)
+			}
+			EvalError::BUILTIN_ERROR_LEN(l) => {
+				write!(f, "wrong number of arguments. got={}, want=1", l)
+			}
+			EvalError::UNSUPPORTED_BUILTIN_USAGE(b, o) => {
+				write!(f, "argument to '{}' not supported, got {}", b, o.get_type())
 			}
 		}
 	}
@@ -318,7 +387,7 @@ impl Evaluator {
 				Expression::PREFIX(p) => self.eval_expression_prefix(p),
 				Expression::INFIX(p) => self.eval_expression_infix(p),
 				Expression::IF(p) => self.eval_expression_if(p),
-				Expression::IDENT(i) => self.eval_expression_ident(&i),
+				Expression::IDENT(i) => self.eval_expression_ident(i),
 				Expression::FUNCTION(f) => self.eval_expression_function(f),
 				Expression::CALL(c) => self.eval_expression_call(c),
 				_ => Err(EvalError::UNKNOWN_EXPRESSION(e))
@@ -335,7 +404,6 @@ impl Evaluator {
 			if let Object::RETURN(value) = result {
 				return Ok(*value);
 			}
-
 		}
 		Ok(result)
 	}
@@ -390,7 +458,6 @@ impl Evaluator {
 
 		match (left, right) {
 			(Object::INTEGER(l), Object::INTEGER(r)) => match expr.operator {
-
 				InfixType::PLUS => Ok(Object::INTEGER(l + r)),
 				InfixType::MINUS => Ok(Object::INTEGER(l - r)),
 				InfixType::MULTIPLICATION => Ok(Object::INTEGER(l * r)),
@@ -398,26 +465,26 @@ impl Evaluator {
 
 				InfixType::LT => {
 					Ok(self.eval_expression_infix_condition(l < r))
-				},
+				}
 				InfixType::GT => {
 					Ok(self.eval_expression_infix_condition(l > r))
-				},
+				}
 				InfixType::EQ => {
 					Ok(self.eval_expression_infix_condition(l == r))
-				},
+				}
 				InfixType::NEQ => {
 					Ok(self.eval_expression_infix_condition(l != r))
-				},
+				}
 
 				_ => Err(EvalError::UNKNOWN_OPERATOR_INFIX(Object::INTEGER(l), expr.operator, Object::INTEGER(r)))
 			},
 			(Object::BOOLEAN(l), Object::BOOLEAN(r)) => match expr.operator {
 				InfixType::EQ => {
 					Ok(self.eval_expression_infix_condition(l == r))
-				},
+				}
 				InfixType::NEQ => {
 					Ok(self.eval_expression_infix_condition(l != r))
-				},
+				}
 				_ => Err(EvalError::UNKNOWN_OPERATOR_INFIX(Object::BOOLEAN(l), expr.operator, Object::BOOLEAN(r)))
 			},
 			(Object::STRING(l), Object::STRING(r)) => {
@@ -432,9 +499,9 @@ impl Evaluator {
 		let condition = self.eval(Node::EXPRESSION(*expr.condition))?;
 
 		if self.eval_expression_if_truthy(&condition) {
-			return self.eval(Node::STATEMENT(Statement::BLOCK(expr.consequence)))
+			return self.eval(Node::STATEMENT(Statement::BLOCK(expr.consequence)));
 		} else if let Some(alt) = expr.alternative {
-			return self.eval(Node::STATEMENT(Statement::BLOCK(alt)))
+			return self.eval(Node::STATEMENT(Statement::BLOCK(alt)));
 		} else {
 			Ok(OBJ_NULL)
 		}
@@ -462,7 +529,7 @@ impl Evaluator {
 				let mut str = l.to_owned();
 				str.push_str(&r.to_owned());
 				Object::STRING(str)
-			},
+			}
 			InfixType::EQ => {
 				self.eval_expression_infix_condition(l == r)
 			}
@@ -475,23 +542,28 @@ impl Evaluator {
 		Ok(result)
 	}
 
-	fn eval_expression_ident(&self, ident: &String) -> Result<Object, EvalError> {
-		match self.environment.borrow_mut().get(&ident) {
-			Some(value) => Ok(value),
+	fn eval_expression_ident(&self, ident: String) -> Result<Object, EvalError> {
+		match Builtin::lookup(ident.clone()) {
+			Some(f) => return Ok(Object::BUILTIN(f)),
 			None => {
-				Err(EvalError::UNKNOWN_IDENTIFIER(ident.clone()))
+				match self.environment.borrow_mut().get(&ident) {
+					Some(value) => Ok(value),
+					None => {
+						Err(EvalError::UNKNOWN_IDENTIFIER(ident.clone()))
+					}
+				}
 			}
 		}
 	}
 
 	fn eval_expression_function(&self, func: FunctionLiteral) -> Result<Object, EvalError> {
-		Ok(Object::FUNCTION(Function{parameters: func.parameters.clone(), body:func.body.clone(), env: Rc::clone(&self.environment)}))
+		Ok(Object::FUNCTION(Function { parameters: func.parameters.clone(), body: func.body.clone(), env: Rc::clone(&self.environment) }))
 	}
 
 	fn eval_expression_call(&mut self, call: CallExpression) -> Result<Object, EvalError> {
 		let func = self.eval(Node::EXPRESSION(*call.function))?;
 		let args = self.eval_expressions(call.arguments)?;
-		return self.apply_function(func, args)
+		return self.apply_function(func, args);
 	}
 
 	fn apply_function(&mut self, func: Object, args: Vec<Object>) -> Result<Object, EvalError> {
@@ -509,7 +581,11 @@ impl Evaluator {
 
 			self.environment = old_env;
 
-			return Ok(evaluated)?
+			return Ok(evaluated)?;
+		}
+
+		if let Some(b) = Builtin::lookup(func.to_string()) {
+			return Ok(b.apply(args)?)
 		}
 
 		Err(EvalError::UNSUPPORTED_OBJECT(func))
@@ -930,13 +1006,21 @@ fn test_eval_handle_error() {
 			input: r#""Hello" - "World""#,
 			expected: "unknown operator: STRING - STRING",
 		},
+		Test {
+			input: "len(1)",
+			expected: "argument to 'len' not supported, got INTEGER",
+		},
+		Test {
+			input: r#"len("one", "two")"#,
+			expected: "wrong number of arguments. got=2, want=1",
+		},
 	];
 
 	for test in tests {
 		match test_eval(test.input) {
 			Ok(e) => {
 				panic!("expected error: {}, got: {} instead, for: {}", test.expected, e, test.input)
-			},
+			}
 			Err(e) => {
 				assert_eq!(e.to_string(), test.expected);
 			}
@@ -986,22 +1070,22 @@ fn test_eval_statement_function() {
 	let tests = vec![
 		Test {
 			input: "fn(x) { x + 2; };",
-			expected: Object::FUNCTION(Function{
+			expected: Object::FUNCTION(Function {
 				parameters: vec![String::from("x")],
-				body: BlockStatement{
+				body: BlockStatement {
 					statements: vec![
 						Statement::EXPRESSION(
 							Expression::INFIX(
-								InfixExpression{
+								InfixExpression {
 									left: Box::new(Expression::IDENT(String::from("x"))),
 									operator: InfixType::PLUS,
-									right: Box::new(Expression::LITERAL(Literal::INT(2)))
+									right: Box::new(Expression::LITERAL(Literal::INT(2))),
 								}
 							)
 						)
 					]
 				},
-				env: Rc::new(RefCell::new(Environment::new()))
+				env: Rc::new(RefCell::new(Environment::new())),
 			}),
 		},
 	];
@@ -1080,8 +1164,35 @@ fn test_eval_statement_function_call_closures() {
 	}
 }
 
-//=== EVAL END ====
+#[test]
+fn test_eval_statement_function_builtin() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: isize,
+	}
 
+	let tests = vec![
+		Test {
+			input: r#"len("")"#,
+			expected: 0,
+		},
+		Test {
+			input: r#"len("four")"#,
+			expected: 4,
+		},
+		Test {
+			input: r#"len("hello world")"#,
+			expected: 11,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::INTEGER(test.expected));
+	}
+}
+
+//=== EVAL END ====
 
 
 //=== AST BEGIN ===
@@ -1498,19 +1609,19 @@ fn test_parse_statement_let() {
 	let tests = vec![
 		Test {
 			input: "let x = 7;",
-			expected: Statement::LET(LetStatement{name: String::from("x"), value: Expression::LITERAL(Literal::INT(7))}),
+			expected: Statement::LET(LetStatement { name: String::from("x"), value: Expression::LITERAL(Literal::INT(7)) }),
 		},
 		Test {
 			input: "let y = true;",
-			expected: Statement::LET(LetStatement{name: String::from("y"), value: Expression::LITERAL(Literal::BOOL(true))}),
+			expected: Statement::LET(LetStatement { name: String::from("y"), value: Expression::LITERAL(Literal::BOOL(true)) }),
 		},
 		Test {
 			input: "let z = y;",
-			expected: Statement::LET(LetStatement{name: String::from("z"), value: Expression::IDENT(String::from("y"))}),
+			expected: Statement::LET(LetStatement { name: String::from("z"), value: Expression::IDENT(String::from("y")) }),
 		},
 		Test {
 			input: "let w = \"furkan\";",
-			expected: Statement::LET(LetStatement{name: String::from("w"), value: Expression::LITERAL(Literal::STRING(String::from("furkan")))}),
+			expected: Statement::LET(LetStatement { name: String::from("w"), value: Expression::LITERAL(Literal::STRING(String::from("furkan"))) }),
 		},
 	];
 
@@ -1543,7 +1654,7 @@ fn test_parse_statement_return() {
 		},
 		Test {
 			input: "return \"string\";",
-			expected: Statement::RETURN(ReturnStatement { value: Expression::LITERAL(Literal::STRING(String::from("string")))}),
+			expected: Statement::RETURN(ReturnStatement { value: Expression::LITERAL(Literal::STRING(String::from("string"))) }),
 		},
 	];
 
@@ -1748,22 +1859,22 @@ fn test_parse_statement_expression_function() {
 	let expecteds = vec![
 		Statement::EXPRESSION(
 			Expression::FUNCTION(
-				FunctionLiteral{
+				FunctionLiteral {
 					parameters: vec![
 						String::from("x"),
 						String::from("y"),
 					],
-					body: BlockStatement{
+					body: BlockStatement {
 						statements: vec![
 							Statement::EXPRESSION(Expression::INFIX(
-								InfixExpression{
+								InfixExpression {
 									left: Box::new(Expression::IDENT(String::from("z"))),
 									operator: InfixType::PLUS,
 									right: Box::new(Expression::IDENT(String::from("w"))),
 								}
 							)),
 						],
-					}
+					},
 				}
 			)
 		),
@@ -1814,7 +1925,7 @@ fn test_parse_statement_expression_call() {
 	let expecteds = vec![
 		Statement::EXPRESSION(
 			Expression::CALL(
-				CallExpression{
+				CallExpression {
 					function: Box::new(
 						Expression::IDENT(String::from("add"))
 					),
@@ -1823,14 +1934,14 @@ fn test_parse_statement_expression_call() {
 							Literal::INT(1)
 						),
 						Expression::INFIX(
-							InfixExpression{
+							InfixExpression {
 								left: Box::new(Expression::LITERAL(Literal::INT(2))),
 								operator: InfixType::MULTIPLICATION,
 								right: Box::new(Expression::LITERAL(Literal::INT(3))),
 							}
 						),
 						Expression::INFIX(
-							InfixExpression{
+							InfixExpression {
 								left: Box::new(Expression::LITERAL(Literal::INT(4))),
 								operator: InfixType::PLUS,
 								right: Box::new(Expression::LITERAL(Literal::INT(5))),
@@ -2036,12 +2147,12 @@ impl Parser {
 
 		let body = if let Statement::BLOCK(block) = self.parse_statement_block()? {
 			block
-		} else{
-			return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()))
+		} else {
+			return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()));
 		};
 
 		Ok(Expression::FUNCTION(
-			FunctionLiteral{
+			FunctionLiteral {
 				parameters,
 				body,
 			}
@@ -2090,7 +2201,7 @@ impl Parser {
 			Statement::LET(
 				LetStatement {
 					name: ident.clone(),
-					value: expr
+					value: expr,
 				}
 			)
 		)
@@ -2134,7 +2245,7 @@ impl Parser {
 			self.next_token();
 		}
 
-		Ok(Statement::BLOCK(BlockStatement{statements}))
+		Ok(Statement::BLOCK(BlockStatement { statements }))
 	}
 
 	fn parse_statement_identifier(&mut self) -> Result<Expression, ParserError> {
@@ -2229,7 +2340,7 @@ impl Parser {
 		let args = self.parse_expression_call_arguments()?;
 		Ok(
 			Expression::CALL(
-				CallExpression{
+				CallExpression {
 					function: Box::new(function),
 					arguments: args,
 				}
@@ -2283,8 +2394,8 @@ impl Parser {
 
 		let consequence = if let Statement::BLOCK(block) = self.parse_statement_block()? {
 			block
-		} else{
-			return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()))
+		} else {
+			return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()));
 		};
 
 		let mut alternative = None;
@@ -2295,13 +2406,13 @@ impl Parser {
 
 			alternative = if let Statement::BLOCK(block) = self.parse_statement_block()? {
 				Some(block)
-			} else{
-				return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()))
+			} else {
+				return Err(ParserError::UNEXPECTED_STATEMENT_TOKEN(self.curr_token.clone()));
 			};
 		}
 
 		Ok(Expression::IF(
-			IfExpression{
+			IfExpression {
 				condition,
 				consequence,
 				alternative,
