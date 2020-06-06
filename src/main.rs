@@ -10,7 +10,7 @@ const PROMPT: &str = ">> ";
 
 fn main() {
 	let mut input = String::new();
-	let evaluator = Evaluator::new();
+	let mut evaluator = Evaluator::new();
 
 	loop {
 		input.clear();
@@ -54,6 +54,7 @@ fn main() {
 
 //=== OBJ BEGIN ===
 
+pub const STR_FUNCTION: &'static str = "FUNCTION";
 pub const STR_INTEGER: &'static str = "INTEGER";
 pub const STR_BOOLEAN: &'static str = "BOOLEAN";
 pub const STR_RETURN: &'static str = "RETURN";
@@ -65,7 +66,23 @@ pub const OBJ_TRUE: Object = Object::BOOLEAN(true);
 pub const OBJ_FALSE: Object = Object::BOOLEAN(false);
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct Function {
+	parameters: Vec<String>,
+	body: BlockStatement,
+	env: Rc<RefCell<Environment>>
+}
+
+impl fmt::Display for Function {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		let parameters = self.parameters.join(", ");
+
+		write!(f, "<fn({})> {{\n{}\n}}", parameters, self.body)
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Object {
+	FUNCTION(Function),
 	INTEGER(isize),
 	BOOLEAN(bool),
 	RETURN(Box<Object>),
@@ -74,6 +91,10 @@ pub enum Object {
 }
 
 impl Object {
+	pub fn is_function(&self) -> bool {
+		self.get_type() == STR_FUNCTION
+	}
+
 	pub fn is_integer(&self) -> bool {
 		self.get_type() == STR_INTEGER
 	}
@@ -96,6 +117,7 @@ impl Object {
 
 	pub fn get_type(&self) -> &str {
 		match self {
+			Object::FUNCTION(_) => STR_FUNCTION,
 			Object::INTEGER(_) => STR_INTEGER,
 			Object::BOOLEAN(_) => STR_BOOLEAN,
 			Object::RETURN(_) => STR_RETURN,
@@ -108,6 +130,7 @@ impl Object {
 impl fmt::Display for Object {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
+			Object::FUNCTION(func) => func.fmt(f),
 			Object::INTEGER(i) => write!(f, "{}", i),
 			Object::BOOLEAN(i) => write!(f, "{}", i),
 			Object::RETURN(r) => write!(f, "{}", r),
@@ -142,6 +165,10 @@ fn test_objects() {
 			expected: "ERROR",
 		},
 		Test {
+			input: Object::FUNCTION(Function{parameters: vec![], body: BlockStatement{statements: vec![]}, env: Rc::new(RefCell::new(Environment::new()))}),
+			expected: "FUNCTION",
+		},
+		Test {
 			input: Object::NULL,
 			expected: "NULL",
 		},
@@ -152,8 +179,9 @@ fn test_objects() {
 		assert_eq!(type_name, test.expected);
 
 		match test.input {
-			Object::INTEGER(i) => assert_eq!(test.input.is_integer(), true),
-			Object::BOOLEAN(i) => assert_eq!(test.input.is_boolean(), true),
+			Object::FUNCTION(_) => assert_eq!(test.input.is_function(), true),
+			Object::INTEGER(_) => assert_eq!(test.input.is_integer(), true),
+			Object::BOOLEAN(_) => assert_eq!(test.input.is_boolean(), true),
 			Object::RETURN(_) => assert_eq!(test.input.is_return(), true),
 			Object::ERROR(_) => assert_eq!(test.input.is_error(), true),
 			Object::NULL => assert_eq!(test.input.is_null(), true),
@@ -169,12 +197,13 @@ fn test_objects() {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-	store: HashMap<String, Object>
+	store: HashMap<String, Object>,
+	outer: Option<Rc<RefCell<Environment>>>
 }
 
 impl Default for Environment {
 	fn default() -> Environment {
-		Environment { store: HashMap::new() }
+		Environment { store: HashMap::new(), outer: None }
 	}
 }
 
@@ -184,12 +213,21 @@ impl Environment {
 		return Environment::default();
 	}
 
+	fn new_enclosed(outer: Rc<RefCell<Environment>>) -> Self {
+		let mut env = Environment::default();
+		env.outer = Some(outer);
+		env
+	}
+
 	fn get(&self, key: &str) -> Option<Object> {
 		match self.store.get(key) {
 			Some(obj) => {
 				Some(obj.clone())
 			}
-			None => None,
+			None => match self.outer {
+				Some(ref outer) => outer.borrow().get(key),
+				None => None
+			},
 		}
 	}
 
@@ -209,7 +247,8 @@ pub enum EvalError {
 	UNKNOWN_OPERATOR_INFIX(Object, InfixType, Object),
 	UNKNOWN_EXPRESSION(Expression),
 	UNKNOWN_IDENTIFIER(String),
-	TYPE_MISMATCH(Object, InfixType, Object)
+	TYPE_MISMATCH(Object, InfixType, Object),
+	UNSUPPORTED_OBJECT(Object)
 }
 
 impl fmt::Display for EvalError {
@@ -230,6 +269,9 @@ impl fmt::Display for EvalError {
 			EvalError::TYPE_MISMATCH(l, t, r) => {
 				write!(f, "type mismatch: {} {} {}", l.get_type(), t, r.get_type())
 			}
+			EvalError::UNSUPPORTED_OBJECT(o) => {
+				write!(f, "unsupported object: {}", o.get_type())
+			}
 		}
 	}
 }
@@ -245,7 +287,7 @@ impl Evaluator {
 		}
 	}
 
-	fn eval(&self, node: Node) -> Result<Object, EvalError> {
+	fn eval(&mut self, node: Node) -> Result<Object, EvalError> {
 		match node {
 			Node::PROGRAM(p) => self.eval_program(p),
 			Node::STATEMENT(s) => match s {
@@ -268,13 +310,15 @@ impl Evaluator {
 				Expression::INFIX(p) => self.eval_expression_infix(p),
 				Expression::IF(p) => self.eval_expression_if(p),
 				Expression::IDENT(i) => self.eval_expression_ident(&i),
+				Expression::FUNCTION(f) => self.eval_expression_function(f),
+				Expression::CALL(c) => self.eval_expression_call(c),
 				_ => Err(EvalError::UNKNOWN_EXPRESSION(e))
 			}
 			_ => unimplemented!(),
 		}
 	}
 
-	fn eval_program(&self, program: Program) -> Result<Object, EvalError> {
+	fn eval_program(&mut self, program: Program) -> Result<Object, EvalError> {
 		let mut result = Object::NULL;
 		for stmt in program.statements {
 			result = self.eval(Node::STATEMENT(stmt))?;
@@ -287,7 +331,7 @@ impl Evaluator {
 		Ok(result)
 	}
 
-	fn eval_statement_block(&self, block: BlockStatement) -> Result<Object, EvalError> {
+	fn eval_statement_block(&mut self, block: BlockStatement) -> Result<Object, EvalError> {
 		let mut result = OBJ_NULL;
 		for stmt in block.statements {
 			result = self.eval(Node::STATEMENT(stmt))?;
@@ -299,19 +343,19 @@ impl Evaluator {
 		Ok(result)
 	}
 
-	fn eval_statement_let(&self, stmt: LetStatement) -> Result<Object, EvalError> {
+	fn eval_statement_let(&mut self, stmt: LetStatement) -> Result<Object, EvalError> {
 		let value = self.eval(Node::EXPRESSION(stmt.value))?;
 		self.environment.borrow_mut().set(stmt.name, &value);
 
 		Ok(value)
 	}
 
-	fn eval_statement_return(&self, ret: ReturnStatement) -> Result<Object, EvalError> {
+	fn eval_statement_return(&mut self, ret: ReturnStatement) -> Result<Object, EvalError> {
 		let value = self.eval(Node::EXPRESSION(ret.value))?;
 		Ok(Object::RETURN(Box::new(value)))
 	}
 
-	fn eval_expression_prefix(&self, expr: PrefixExpression) -> Result<Object, EvalError> {
+	fn eval_expression_prefix(&mut self, expr: PrefixExpression) -> Result<Object, EvalError> {
 		let right = self.eval(Node::EXPRESSION(*expr.right))?;
 
 		match expr.operator {
@@ -331,7 +375,7 @@ impl Evaluator {
 		}
 	}
 
-	fn eval_expression_infix(&self, expr: InfixExpression) -> Result<Object, EvalError> {
+	fn eval_expression_infix(&mut self, expr: InfixExpression) -> Result<Object, EvalError> {
 		let left = self.eval(Node::EXPRESSION(*expr.left))?;
 		let right = self.eval(Node::EXPRESSION(*expr.right))?;
 
@@ -372,7 +416,7 @@ impl Evaluator {
 		}
 	}
 
-	fn eval_expression_if(&self, expr: IfExpression) -> Result<Object, EvalError> {
+	fn eval_expression_if(&mut self, expr: IfExpression) -> Result<Object, EvalError> {
 		let condition = self.eval(Node::EXPRESSION(*expr.condition))?;
 
 		if self.eval_expression_if_truthy(&condition) {
@@ -407,14 +451,60 @@ impl Evaluator {
 				Err(EvalError::UNKNOWN_IDENTIFIER(ident.clone()))
 			}
 		}
+	}
 
+	fn eval_expression_function(&self, func: FunctionLiteral) -> Result<Object, EvalError> {
+		Ok(Object::FUNCTION(Function{parameters: func.parameters.clone(), body:func.body.clone(), env: Rc::clone(&self.environment)}))
+	}
+
+	fn eval_expression_call(&mut self, call: CallExpression) -> Result<Object, EvalError> {
+		let func = self.eval(Node::EXPRESSION(*call.function))?;
+		let args = self.eval_expressions(call.arguments)?;
+		return self.apply_function(func, args)
+	}
+
+	fn apply_function(&mut self, func: Object, args: Vec<Object>) -> Result<Object, EvalError> {
+		if let Object::FUNCTION(f) = func {
+			let old_env = Rc::clone(&self.environment);
+			let mut new_env = Environment::new_enclosed(Rc::clone(&f.env));
+
+			for (i, param) in f.parameters.iter().enumerate() {
+				new_env.set(param.to_string(), args.get(i).unwrap())
+			}
+
+			self.environment = Rc::new(RefCell::new(new_env));
+
+			let evaluated = self.eval(Node::STATEMENT(Statement::BLOCK(f.body)));
+
+			self.environment = old_env;
+
+			return Ok(evaluated)?
+		}
+
+		Err(EvalError::UNSUPPORTED_OBJECT(func))
+	}
+
+	// fn extend_function_env(func: &Function, args: &[Object]) -> Result<Environment, EvalError> {
+	// 	let mut env = Environment::new_enclosed(func.env.clone());
+	// 	for (i, param) in func.parameters.iter().enumerate() {
+	// 		env.set(param.to_string(), args.get(i).unwrap())
+	// 	}
+	// 	Ok(env)
+	// }
+
+	fn eval_expressions(&mut self, exprs: Vec<Expression>) -> Result<Vec<Object>, EvalError> {
+		let mut results = vec![];
+		for expr in exprs {
+			results.push(self.eval(Node::EXPRESSION(expr))?);
+		}
+		Ok(results)
 	}
 }
 
 fn test_eval(input: &str) -> Result<Object, EvalError> {
 	let lexer = Lexer::new(input.to_owned());
 	let mut parser = Parser::new(lexer);
-	let evaluator = Evaluator::new();
+	let mut evaluator = Evaluator::new();
 
 	let (actual, errs) = parser.parse();
 
@@ -753,6 +843,10 @@ fn test_eval_handle_error() {
 			input: "foobar",
 			expected: "identifier not found: foobar",
 		},
+		Test {
+			input: "let newAdder = fn(x) { fn(y) { x + y } }; let addTwo = newAdder(2); x",
+			expected: "identifier not found: x",
+		},
 	];
 
 	for test in tests {
@@ -796,6 +890,110 @@ fn test_eval_statement_let() {
 	for test in tests {
 		let evaluated = test_eval(test.input).unwrap();
 		assert_eq!(evaluated, test.expected);
+	}
+}
+
+#[test]
+fn test_eval_statement_function() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: "fn(x) { x + 2; };",
+			expected: Object::FUNCTION(Function{
+				parameters: vec![String::from("x")],
+				body: BlockStatement{
+					statements: vec![
+						Statement::EXPRESSION(
+							Expression::INFIX(
+								InfixExpression{
+									left: Box::new(Expression::IDENT(String::from("x"))),
+									operator: InfixType::PLUS,
+									right: Box::new(Expression::LITERAL(Literal::INT(2)))
+								}
+							)
+						)
+					]
+				},
+				env: Rc::new(RefCell::new(Environment::new()))
+			}),
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, test.expected);
+	}
+}
+
+#[test]
+fn test_eval_statement_function_call() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: isize,
+	}
+
+	let tests = vec![
+		Test {
+			input: "let identity = fn(x) { x; }; identity(7);",
+			expected: 7,
+		},
+		Test {
+			input: "let identity = fn(x) { return x; }; identity(15);",
+			expected: 15,
+		},
+		Test {
+			input: "let double = fn(x) { x * 34; }; double(2);",
+			expected: 68,
+		},
+		Test {
+			input: "let add = fn(x, y) { x + y; }; add(7, 7);",
+			expected: 14,
+		},
+		Test {
+			input: "let add = fn(x, y) { x + y; }; add(1 + 3, add(5, 7));",
+			expected: 16,
+		},
+		Test {
+			input: "fn(x) { x; } (35)",
+			expected: 35,
+		},
+		Test {
+			input: "let add = fn(a, b) { a + b }; let sub = fn(a, b) { a - b }; let applyFunc = fn(a, b, func) { func(a, b) }; applyFunc(2, 2, add);",
+			expected: 4,
+		},
+		Test {
+			input: "let add = fn(a, b) { a + b }; let sub = fn(a, b) { a - b }; let applyFunc = fn(a, b, func) { func(a, b) }; applyFunc(10, 2, sub);",
+			expected: 8,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::INTEGER(test.expected));
+	}
+}
+
+#[test]
+fn test_eval_statement_function_call_closures() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: isize,
+	}
+
+	let tests = vec![
+		Test {
+			input: "let newAdder = fn(x) { fn(y) { x + y }; }; let addTwo = newAdder(14); addTwo(35);",
+			expected: 49,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::INTEGER(test.expected));
 	}
 }
 
