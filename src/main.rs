@@ -7,27 +7,39 @@ const PROMPT: &str = ">> ";
 
 fn main() {
 	let mut input = String::new();
-	let evaluator = Evaluator::new();
 
 	loop {
-		println!("Type: ");
+		input.clear();
+
+		println!("\nType: ");
+
 		let s = match io::stdin().read_line(&mut input) {
 			Ok(_) => {
+				let evaluator = Evaluator::new();
 				let (program, errs) = Parser::new(Lexer::new(input.to_owned())).parse();
 
 				if errs.len() > 0 {
 					for err in errs {
-						println!("Err: {}", err);
+						println!("ParserErr: {}", err);
 					}
 					break;
 				}
 
-				let evaluated = evaluator.eval(Node::PROGRAM(program)).unwrap();
-
-				println!("Evaluated:\n{}", evaluated);
+				match evaluator.eval(Node::PROGRAM(program)) {
+					Ok(o) => {
+						match o {
+							Object::NULL => {},
+							_ => println!("Evaluated:\n{}", o)
+						}
+					},
+					Err(e) => {
+						println!("EvalError: {}", e);
+						continue;
+					}
+				}
 			}
 			Err(e) => {
-				println!("Something went wrong: {}", e);
+				println!("StdinErr: {}", e);
 				break;
 			}
 		};
@@ -41,6 +53,7 @@ fn main() {
 pub const STR_INTEGER: &'static str = "INTEGER";
 pub const STR_BOOLEAN: &'static str = "BOOLEAN";
 pub const STR_RETURN: &'static str = "RETURN";
+pub const STR_ERROR: &'static str = "ERROR";
 pub const STR_NULL: &'static str = "NULL";
 
 pub const OBJ_NULL: Object = Object::NULL;
@@ -52,6 +65,7 @@ pub enum Object {
 	INTEGER(isize),
 	BOOLEAN(bool),
 	RETURN(Box<Object>),
+	ERROR(String),
 	NULL,
 }
 
@@ -68,6 +82,10 @@ impl Object {
 		self.get_type() == STR_RETURN
 	}
 
+	pub fn is_error(&self) -> bool {
+		self.get_type() == STR_ERROR
+	}
+
 	pub fn is_null(&self) -> bool {
 		self.get_type() == STR_NULL
 	}
@@ -77,6 +95,7 @@ impl Object {
 			Object::INTEGER(_) => STR_INTEGER,
 			Object::BOOLEAN(_) => STR_BOOLEAN,
 			Object::RETURN(_) => STR_RETURN,
+			Object::ERROR(_) => STR_ERROR,
 			Object::NULL => STR_NULL,
 		}
 	}
@@ -88,6 +107,7 @@ impl fmt::Display for Object {
 			Object::INTEGER(i) => write!(f, "{}", i),
 			Object::BOOLEAN(i) => write!(f, "{}", i),
 			Object::RETURN(r) => write!(f, "{}", r),
+			Object::ERROR(e) => write!(f, "{}", e),
 			Object::NULL => write!(f, ""),
 		}
 	}
@@ -114,6 +134,10 @@ fn test_objects() {
 			expected: "RETURN",
 		},
 		Test {
+			input: Object::ERROR(String::from("")),
+			expected: "ERROR",
+		},
+		Test {
 			input: Object::NULL,
 			expected: "NULL",
 		},
@@ -127,6 +151,7 @@ fn test_objects() {
 			Object::INTEGER(i) => assert_eq!(test.input.is_integer(), true),
 			Object::BOOLEAN(i) => assert_eq!(test.input.is_boolean(), true),
 			Object::RETURN(_) => assert_eq!(test.input.is_return(), true),
+			Object::ERROR(_) => assert_eq!(test.input.is_error(), true),
 			Object::NULL => assert_eq!(test.input.is_null(), true),
 		}
 	}
@@ -139,6 +164,29 @@ fn test_objects() {
 
 //=== EVAL START ====
 
+#[derive(Debug)]
+pub enum EvalError {
+	UNKNOWN_OPERATOR_PREFIX(Object, PrefixType),
+	UNKNOWN_OPERATOR_INFIX(Object, InfixType, Object),
+	TYPE_MISMATCH(Object, InfixType, Object)
+}
+
+impl fmt::Display for EvalError {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		match self {
+			EvalError::UNKNOWN_OPERATOR_PREFIX(o, p) => {
+				write!(f, "unknown operator: {}{}", p, o.get_type())
+			},
+			EvalError::UNKNOWN_OPERATOR_INFIX(l, i, r) => {
+				write!(f, "unknown operator: {} {} {}", l.get_type(), i, r.get_type())
+			},
+			EvalError::TYPE_MISMATCH(l, t, r) => {
+				write!(f, "type mismatch: {} {} {}", l.get_type(), t, r.get_type())
+			}
+		}
+	}
+}
+
 pub struct Evaluator {
 
 }
@@ -148,7 +196,7 @@ impl Evaluator {
 		Evaluator {}
 	}
 
-	fn eval(&self, node: Node) -> Result<Object, Error> {
+	fn eval(&self, node: Node) -> Result<Object, EvalError> {
 		match node {
 			Node::PROGRAM(p) => self.eval_program(p),
 			Node::STATEMENT(s) => match s {
@@ -175,7 +223,7 @@ impl Evaluator {
 		}
 	}
 
-	fn eval_program(&self, program: Program) -> Result<Object, Error> {
+	fn eval_program(&self, program: Program) -> Result<Object, EvalError> {
 		let mut result = Object::NULL;
 		for stmt in program.statements {
 			result = self.eval(Node::STATEMENT(stmt))?;
@@ -188,7 +236,7 @@ impl Evaluator {
 		Ok(result)
 	}
 
-	fn eval_statement_block(&self, block: BlockStatement) -> Result<Object, Error> {
+	fn eval_statement_block(&self, block: BlockStatement) -> Result<Object, EvalError> {
 		let mut result = OBJ_NULL;
 		for stmt in block.statements {
 			result = self.eval(Node::STATEMENT(stmt))?;
@@ -200,12 +248,12 @@ impl Evaluator {
 		Ok(result)
 	}
 
-	fn eval_statement_return(&self, ret: ReturnStatement) -> Result<Object, Error> {
+	fn eval_statement_return(&self, ret: ReturnStatement) -> Result<Object, EvalError> {
 		let value = self.eval(Node::EXPRESSION(ret.value))?;
 		Ok(Object::RETURN(Box::new(value)))
 	}
 
-	fn eval_expression_prefix(&self, expr: PrefixExpression) -> Result<Object, Error> {
+	fn eval_expression_prefix(&self, expr: PrefixExpression) -> Result<Object, EvalError> {
 		let right = self.eval(Node::EXPRESSION(*expr.right))?;
 
 		match expr.operator {
@@ -219,13 +267,13 @@ impl Evaluator {
 			},
 			PrefixType::MINUS => match right {
 				Object::INTEGER(i) => Ok(Object::INTEGER(-i)),
-				_ => unimplemented!(),
+				_ => Err(EvalError::UNKNOWN_OPERATOR_PREFIX(right, expr.operator))
 			},
-			_ => unimplemented!(),
+			_ => Err(EvalError::UNKNOWN_OPERATOR_PREFIX(right, expr.operator))
 		}
 	}
 
-	fn eval_expression_infix(&self, expr: InfixExpression) -> Result<Object, Error> {
+	fn eval_expression_infix(&self, expr: InfixExpression) -> Result<Object, EvalError> {
 		let left = self.eval(Node::EXPRESSION(*expr.left))?;
 		let right = self.eval(Node::EXPRESSION(*expr.right))?;
 
@@ -249,7 +297,8 @@ impl Evaluator {
 				InfixType::NEQ => {
 					Ok(self.eval_expression_infix_condition(l != r))
 				},
-				_ => unimplemented!(),
+
+				_ => Err(EvalError::UNKNOWN_OPERATOR_INFIX(Object::INTEGER(l), expr.operator, Object::INTEGER(r)))
 			},
 			(Object::BOOLEAN(l), Object::BOOLEAN(r)) => match expr.operator {
 				InfixType::EQ => {
@@ -258,13 +307,14 @@ impl Evaluator {
 				InfixType::NEQ => {
 					Ok(self.eval_expression_infix_condition(l != r))
 				},
-				_ => unimplemented!(),
+				_ => Err(EvalError::UNKNOWN_OPERATOR_INFIX(Object::BOOLEAN(l), expr.operator, Object::BOOLEAN(r)))
 			},
+			(l, r) => Err(EvalError::TYPE_MISMATCH(l, expr.operator, r)),
 			_ => unimplemented!(),
 		}
 	}
 
-	fn eval_expression_if(&self, expr: IfExpression) -> Result<Object, Error> {
+	fn eval_expression_if(&self, expr: IfExpression) -> Result<Object, EvalError> {
 		let condition = self.eval(Node::EXPRESSION(*expr.condition))?;
 
 		if self.eval_expression_if_truthy(&condition) {
@@ -293,16 +343,18 @@ impl Evaluator {
 	}
 }
 
-fn test_eval(input: &str) -> Result<Object, Error> {
+fn test_eval(input: &str) -> Result<Object, EvalError> {
 	let lexer = Lexer::new(input.to_owned());
 	let mut parser = Parser::new(lexer);
 	let evaluator = Evaluator::new();
 
 	let (actual, errs) = parser.parse();
 
-	assert_eq!(0, errs.len());
+	if errs.len() == 0 {
+		return evaluator.eval(Node::PROGRAM(actual));
+	}
 
-	Ok(evaluator.eval(Node::PROGRAM(actual)))?
+	panic!("fail!");
 }
 
 #[test]
@@ -541,6 +593,10 @@ fn test_eval_statement_return() {
 			input: "9; return 2 * 7; 9;",
 			expected: Object::INTEGER(14),
 		},
+		Test {
+			input: "if (2 > 1) { if (3 > 1) { return 7; } return 0; }",
+			expected: Object::INTEGER(7),
+		},
 	];
 
 	for test in tests {
@@ -586,6 +642,56 @@ fn test_eval_operator_bang() {
 	for test in tests {
 		let evaluated = test_eval(test.input).unwrap();
 		assert_eq!(evaluated, Object::BOOLEAN(test.expected));
+	}
+}
+
+#[test]
+fn test_eval_handle_error() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: &'a str,
+	}
+
+	let tests = vec![
+		Test {
+			input: "7 + true;",
+			expected: "type mismatch: INTEGER + BOOLEAN",
+		},
+		Test {
+			input: "7 + true; 7;",
+			expected: "type mismatch: INTEGER + BOOLEAN",
+		},
+		Test {
+			input: "-true",
+			expected: "unknown operator: -BOOLEAN",
+		},
+		Test {
+			input: "true + false;",
+			expected: "unknown operator: BOOLEAN + BOOLEAN",
+		},
+		Test {
+			input: "7; true + false; 7",
+			expected: "unknown operator: BOOLEAN + BOOLEAN",
+		},
+		Test {
+			input: "if (10 > 1) { true + false; }",
+			expected: "unknown operator: BOOLEAN + BOOLEAN",
+		},
+		Test {
+			input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }",
+			expected: "unknown operator: BOOLEAN + BOOLEAN",
+		},
+	];
+
+	for test in tests {
+		match test_eval(test.input) {
+			Ok(e) => {
+				panic!("expected error: {}, got: {} instead, for: {}", test.expected, e, test.input)
+			},
+			Err(e) => {
+				assert_eq!(e.to_string(), test.expected);
+			}
+		}
 	}
 }
 
