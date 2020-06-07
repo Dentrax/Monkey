@@ -4,7 +4,7 @@ use std::fmt::{Error, Formatter};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::fs::read;
+use std::ptr::hash;
 
 const PROMPT: &str = ">> ";
 
@@ -56,6 +56,7 @@ fn main() {
 pub const STR_FUNCTION: &'static str = "FUNCTION";
 pub const STR_BUILTIN: &'static str = "BUILTIN";
 pub const STR_ARRAY: &'static str = "ARRAY";
+pub const STR_HASH: &'static str = "HASH";
 pub const STR_INTEGER: &'static str = "INTEGER";
 pub const STR_BOOLEAN: &'static str = "BOOLEAN";
 pub const STR_STRING: &'static str = "STRING";
@@ -87,6 +88,7 @@ pub enum Object {
 	FUNCTION(Function),
 	BUILTIN(Builtin),
 	ARRAY(Array),
+	HASH(Hash),
 	INTEGER(isize),
 	BOOLEAN(bool),
 	STRING(String),
@@ -106,6 +108,10 @@ impl Object {
 
 	pub fn is_array(&self) -> bool {
 		self.get_type() == STR_ARRAY
+	}
+
+	pub fn is_hash(&self) -> bool {
+		self.get_type() == STR_HASH
 	}
 
 	pub fn is_integer(&self) -> bool {
@@ -137,6 +143,7 @@ impl Object {
 			Object::FUNCTION(_) => STR_FUNCTION,
 			Object::BUILTIN(_) => STR_BUILTIN,
 			Object::ARRAY(_) => STR_ARRAY,
+			Object::HASH(_) => STR_HASH,
 			Object::INTEGER(_) => STR_INTEGER,
 			Object::BOOLEAN(_) => STR_BOOLEAN,
 			Object::STRING(_) => STR_STRING,
@@ -153,6 +160,7 @@ impl fmt::Display for Object {
 			Object::FUNCTION(func) => func.fmt(f),
 			Object::BUILTIN(b) => b.fmt(f),
 			Object::ARRAY(a) => a.fmt(f),
+			Object::HASH(h) => h.fmt(f),
 			Object::INTEGER(i) => write!(f, "{}", i),
 			Object::BOOLEAN(i) => write!(f, "{}", i),
 			Object::STRING(s) => write!(f, "{}", s),
@@ -184,6 +192,10 @@ fn test_objects() {
 			expected: "ARRAY",
 		},
 		Test {
+			input: Object::HASH(Hash{ pairs: HashMap::new() }),
+			expected: "HASH",
+		},
+		Test {
 			input: Object::BOOLEAN(false),
 			expected: "BOOLEAN",
 		},
@@ -213,6 +225,7 @@ fn test_objects() {
 			Object::FUNCTION(_) => assert_eq!(test.input.is_function(), true),
 			Object::BUILTIN(_) => assert_eq!(test.input.is_builtin(), true),
 			Object::ARRAY(_) => assert_eq!(test.input.is_array(), true),
+			Object::HASH(_) => assert_eq!(test.input.is_hash(), true),
 			Object::INTEGER(_) => assert_eq!(test.input.is_integer(), true),
 			Object::BOOLEAN(_) => assert_eq!(test.input.is_boolean(), true),
 			Object::STRING(_) => assert_eq!(test.input.is_string(), true),
@@ -404,6 +417,45 @@ impl fmt::Display for Array {
 //=== ARRAY END ====
 
 
+//=== HASH BEGIN ====
+
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum Hashable {
+	BOOLEAN(bool),
+	INTEGER(isize),
+	STRING(String),
+}
+
+impl fmt::Display for Hashable {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Hashable::STRING(s) => s.fmt(f),
+			Hashable::INTEGER(i) => i.fmt(f),
+			Hashable::BOOLEAN(b) => b.fmt(f),
+		}
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hash {
+	pairs: HashMap<Hashable, Object>,
+}
+
+impl fmt::Display for Hash {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		let mut pairs = vec![];
+		for pair in &self.pairs {
+			pairs.push(format!(r#"{}: {}"#, pair.0, pair.1));
+		}
+		pairs.sort();
+		write!(f, "{{{}}}", pairs.join(", "))
+	}
+}
+
+//=== HASH END ====
+
+
 
 //=== ENVIRONMENT BEGIN ===
 
@@ -436,7 +488,7 @@ impl Environment {
 				Some(obj.clone())
 			}
 			None => match self.outer {
-				Some(ref outer) => outer.borrow().get(key),
+				Some(ref outer) => outer.borrow_mut().get(key),
 				None => None
 			},
 		}
@@ -458,6 +510,7 @@ pub enum EvalError {
 	UNKNOWN_OPERATOR_INFIX(Object, InfixType, Object),
 	UNKNOWN_EXPRESSION(Expression),
 	UNKNOWN_IDENTIFIER(String),
+	UNKNOWN_HASHABLE(Object),
 	TYPE_MISMATCH(Object, InfixType, Object),
 	UNSUPPORTED_OBJECT(Object),
 	UNKNOWN_BUILTIN(String),
@@ -479,6 +532,9 @@ impl fmt::Display for EvalError {
 			}
 			EvalError::UNKNOWN_IDENTIFIER(e) => {
 				write!(f, "identifier not found: {}", e)
+			}
+			EvalError::UNKNOWN_HASHABLE(e) => {
+				write!(f, "unusable as hash key: {}", e.get_type())
 			}
 			EvalError::TYPE_MISMATCH(l, t, r) => {
 				write!(f, "type mismatch: {} {} {}", l.get_type(), t, r.get_type())
@@ -538,6 +594,7 @@ impl Evaluator {
 				Expression::CALL(c) => self.eval_expression_call(c),
 				Expression::ARRAY(a) => self.eval_expression_array(a),
 				Expression::INDEX(i) => self.eval_expression_index(i),
+				Expression::HASH(h) => self.eval_expression_hash(h),
 				_ => Err(EvalError::UNKNOWN_EXPRESSION(e))
 			}
 			_ => unimplemented!(),
@@ -729,8 +786,40 @@ impl Evaluator {
 					None => Ok(OBJ_NULL),
 				}
 			}
+			(Object::HASH(hash), obj) => {
+				let key = match obj {
+					Object::STRING(s) => Hashable::STRING(s),
+					Object::INTEGER(i) => Hashable::INTEGER(i),
+					Object::BOOLEAN(b) => Hashable::BOOLEAN(b),
+					_ => return Err(EvalError::UNKNOWN_HASHABLE(obj))
+				};
+				match hash.pairs.get(&key) {
+					Some(v) => Ok(v.clone()),
+					None => Ok(OBJ_NULL)
+				}
+			}
 			_ => unimplemented!(),
 		}
+	}
+
+	fn eval_expression_hash(&mut self, hash: HashLiteral) -> Result<Object, EvalError> {
+
+		let mut pairs = HashMap::new();
+
+		for (k, v) in hash.pairs {
+
+			let key = match self.eval(Node::EXPRESSION(k))? {
+				Object::STRING(s) => Hashable::STRING(s),
+				Object::INTEGER(b) => Hashable::INTEGER(b),
+				Object::BOOLEAN(b) => Hashable::BOOLEAN(b),
+
+				_ => unimplemented!(),
+			};
+
+			pairs.insert(key, self.eval(Node::EXPRESSION(v))?);
+		}
+
+		Ok(Object::HASH(Hash { pairs }))
 	}
 
 	fn apply_function(&mut self, func: Object, args: Vec<Object>) -> Result<Object, EvalError> {
@@ -1237,6 +1326,10 @@ fn test_eval_handle_error() {
 			input: r#"len("one", "two")"#,
 			expected: "wrong number of arguments. got=2, want=1",
 		},
+		Test {
+			input: r#"{"name": "Monkey"}[fn(x) { x }];"#,
+			expected: "unusable as hash key: FUNCTION",
+		},
 	];
 
 	for test in tests {
@@ -1548,6 +1641,119 @@ fn test_eval_statement_function_array() {
 	}
 }
 
+macro_rules! hashmap {
+    ($( $key: expr => $val: expr ),*) => {{
+         let mut map = ::std::collections::HashMap::new();
+         $( map.insert($key, $val); )*
+         map
+    }}
+}
+
+#[test]
+fn test_eval_statement_function_hash() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Hash,
+	}
+
+	let tests = vec![
+		Test {
+			input: r#"
+			let two = "two";
+			{
+				"one": 10 - 9,
+				two: 1 + 1,
+				"thr" + "ee": 6 / 2,
+				4: 4,
+				true: 5,
+				false: 6
+			}
+			"#,
+			expected: Hash{ pairs: hashmap![
+				Hashable::STRING(String::from("two")) => Object::INTEGER(2),
+				Hashable::STRING(String::from("one")) => Object::INTEGER(1),
+				Hashable::STRING(String::from("three")) => Object::INTEGER(3),
+				Hashable::BOOLEAN(true) => Object::INTEGER(5),
+				Hashable::BOOLEAN(false) => Object::INTEGER(6),
+				Hashable::INTEGER(4) => Object::INTEGER(4)
+			]},
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::HASH(test.expected));
+	}
+}
+
+#[test]
+fn test_eval_statement_function_hash_index() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: r#"{"foo": 5}["foo"]"#,
+			expected: Object::INTEGER(5),
+		},
+		Test {
+			input: r#"{"foo": 5}["bar"]"#,
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: r#"let key = "foo"; {"foo": 5}[key]"#,
+			expected: Object::INTEGER(5),
+		},
+		Test {
+			input: r#"{}["foo"]"#,
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: r#"{5: 5}[5]"#,
+			expected: Object::INTEGER(5),
+		},
+		Test {
+			input: r#"{true: 5}[true]"#,
+			expected: Object::INTEGER(5),
+		},
+		Test {
+			input: r#"{false: 5}[false]"#,
+			expected: Object::INTEGER(5),
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, test.expected);
+	}
+}
+
+#[test]
+fn test_eval_statement_function_hash_integration() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: &'a str,
+	}
+
+	let tests = vec![
+		Test {
+			input: r#"
+			let people = [{"name": "Alice", "age": 24}, {"name": "Anna", "age": 28}];
+			let getAge = fn(person) { person["name"]; };
+			return getAge(people[0]) + getAge(people[1]);
+			"#,
+			expected: "AliceAnna",
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::STRING(String::from(test.expected)));
+	}
+}
+
 //=== EVAL END ====
 
 
@@ -1589,6 +1795,19 @@ impl fmt::Display for ArrayLiteral {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct HashLiteral {
+	pairs: Vec<(Expression, Expression)>
+}
+
+impl fmt::Display for HashLiteral {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let pairs = self.pairs.iter().map(|(k, v)| format!(r#"{}: {}"#, k, v)).collect::<Vec<String>>();
+		write!(f, "{{{}}}", pairs.join(", "))
+	}
+}
+
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct IndexExpression {
 	left: Box<Expression>,
 	index: Box<Expression>,
@@ -1600,12 +1819,14 @@ impl fmt::Display for IndexExpression {
 	}
 }
 
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
 	IDENT(String),
 	LITERAL(Literal),
 
 	ARRAY(ArrayLiteral),
+	HASH(HashLiteral),
 
 	PREFIX(PrefixExpression),
 	INFIX(InfixExpression),
@@ -1622,6 +1843,7 @@ impl fmt::Display for Expression {
 			Expression::IDENT(i) => i.fmt(f),
 			Expression::LITERAL(i) => i.fmt(f),
 			Expression::ARRAY(i) => i.fmt(f),
+			Expression::HASH(i) => i.fmt(f),
 			Expression::PREFIX(i) => i.fmt(f),
 			Expression::INFIX(i) => i.fmt(f),
 			Expression::INDEX(i) => i.fmt(f),
@@ -2388,6 +2610,65 @@ fn test_parse_statement_expression_array() {
 }
 
 #[test]
+fn test_parse_statement_expression_map() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Statement,
+	}
+
+	let tests = vec![
+		Test {
+			input: "{}",
+			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: vec![]})),
+		},
+		Test {
+			input: r#"{"one": 1, "two": 2, "ten": 10}"#,
+			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: vec![
+				(Expression::LITERAL(Literal::STRING(String::from("one"))), Expression::LITERAL(Literal::INT(1))),
+				(Expression::LITERAL(Literal::STRING(String::from("two"))), Expression::LITERAL(Literal::INT(2))),
+				(Expression::LITERAL(Literal::STRING(String::from("ten"))), Expression::LITERAL(Literal::INT(10)))
+			]})),
+		},
+		Test {
+			input: r#"{"one": 0 + 1, "two": 10 - 8, "ten": 50 / 5}"#,
+			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: vec![
+				(Expression::LITERAL(Literal::STRING(String::from("one"))), Expression::INFIX(
+					InfixExpression{
+						left: Box::new(Expression::LITERAL(Literal::INT(0))),
+						operator: InfixType::PLUS,
+						right: Box::new(Expression::LITERAL(Literal::INT(1))),
+					}
+				)),
+				(Expression::LITERAL(Literal::STRING(String::from("two"))), Expression::INFIX(
+					InfixExpression{
+						left: Box::new(Expression::LITERAL(Literal::INT(10))),
+						operator: InfixType::MINUS,
+						right: Box::new(Expression::LITERAL(Literal::INT(8))),
+					}
+				)),
+				(Expression::LITERAL(Literal::STRING(String::from("ten"))), Expression::INFIX(
+					InfixExpression{
+						left: Box::new(Expression::LITERAL(Literal::INT(50))),
+						operator: InfixType::DIVISION,
+						right: Box::new(Expression::LITERAL(Literal::INT(5))),
+					}
+				)),
+			]})),
+		},
+	];
+
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		if let Some(stmt) = actual.statements.first() {
+			assert_eq!(*stmt, test.expected);
+		} else {
+			assert!(false);
+		};
+	}
+}
+
+
+#[test]
 fn test_parse_statement_expression_index() {
 	struct Test<'a> {
 		input: &'a str,
@@ -2729,6 +3010,7 @@ impl Parser {
 			Token::IF => Parser::parse_expression_if,
 			Token::FUNCTION => Parser::parse_literal_function,
 			Token::LBRACKET => Parser::parse_expression_array,
+			Token::LBRACE => Parser::parse_literal_hash,
 			_ => return None
 		})
 	}
@@ -2767,6 +3049,30 @@ impl Parser {
 	fn parse_expression_array(&mut self) -> Result<Expression, ParserError> {
 		let elems = self.parse_expression_list(Token::RBRACKET)?;
 		Ok(Expression::ARRAY(ArrayLiteral{elements: elems}))
+	}
+
+	fn parse_literal_hash(&mut self) -> Result<Expression, ParserError> {
+		let mut pairs = vec![];
+
+		while !self.peek_token_is(Token::RBRACE) {
+			self.next_token();
+			let key = self.parse_expression(Precedence::LOWEST)?;
+
+			self.expect_peek(Token::COLON)?;
+
+			self.next_token();
+			let value = self.parse_expression(Precedence::LOWEST)?;
+
+			pairs.push((key, value));
+
+			if !self.peek_token_is(Token::RBRACE) {
+				self.expect_peek(Token::COMMA)?;
+			}
+		}
+
+		self.expect_peek(Token::RBRACE)?;
+
+		Ok(Expression::HASH(HashLiteral{ pairs }))
 	}
 
 	fn parse_expression_list(&mut self, end: Token) -> Result<Vec<Expression>, ParserError> {
@@ -3083,6 +3389,27 @@ fn test_next_token_array() {
 	}
 }
 
+#[test]
+fn test_next_token_map() {
+	let input = r#"{"foo": "bar"};"#;
+
+	let expected = vec![
+		Token::LBRACE,
+		Token::STRING(String::from("foo")),
+		Token::COLON,
+		Token::STRING(String::from("bar")),
+		Token::RBRACE,
+		Token::SEMICOLON,
+		Token::EOF,
+	];
+
+	let mut l = Lexer::new(input.to_owned());
+	for i in expected {
+		let t = l.next_token();
+		assert_eq!(t, i);
+	}
+}
+
 
 struct Lexer {
 	//current input string
@@ -3164,10 +3491,11 @@ impl Lexer {
 			'*' => t = Token::ASTERISK,
 			'<' => t = Token::LT,
 			'>' => t = Token::GT,
+			',' => t = Token::COMMA,
+			':' => t = Token::COLON,
 			';' => t = Token::SEMICOLON,
 			'(' => t = Token::LPAREN,
 			')' => t = Token::RPAREN,
-			',' => t = Token::COMMA,
 			'{' => t = Token::LBRACE,
 			'}' => t = Token::RBRACE,
 			'[' => t = Token::LBRACKET,
@@ -3265,6 +3593,7 @@ pub enum Token {
 	GT,
 
 	COMMA,
+	COLON,
 	SEMICOLON,
 
 	LPAREN,
@@ -3313,6 +3642,7 @@ impl fmt::Display for Token {
 			Token::GT => write!(f, ">"),
 
 			Token::COMMA => write!(f, ","),
+			Token::COLON => write!(f, ":"),
 			Token::SEMICOLON => write!(f, ";"),
 
 			Token::LPAREN => write!(f, "("),
