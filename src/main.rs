@@ -251,6 +251,7 @@ pub enum Builtin {
 	REST,
 	REVERSE,
 	PUSH,
+	PUTS,
 }
 
 impl fmt::Display for Builtin {
@@ -262,6 +263,7 @@ impl fmt::Display for Builtin {
 			Builtin::REST => write!(f, "rest"),
 			Builtin::REVERSE => write!(f, "reverse"),
 			Builtin::PUSH => write!(f, "push"),
+			Builtin::PUTS => write!(f, "puts"),
 		}
 	}
 }
@@ -275,6 +277,7 @@ impl Builtin {
 			"rest" => Some(Builtin::REST),
 			"reverse" => Some(Builtin::REVERSE),
 			"push" => Some(Builtin::PUSH),
+			"puts" => Some(Builtin::PUTS),
 			_ => None
 		}
 	}
@@ -287,6 +290,7 @@ impl Builtin {
 			Builtin::REST => builtin_rest(&args),
 			Builtin::REVERSE => builtin_reverse(&args),
 			Builtin::PUSH => builtin_push(&args),
+			Builtin::PUTS => builtin_puts(&args),
 		}
 	}
 }
@@ -394,6 +398,13 @@ fn builtin_push(args: &[Object]) -> Result<Object, EvalError> {
 		}
 		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::PUSH, args[0].clone()))
 	}
+}
+
+fn builtin_puts(args: &[Object]) -> Result<Object, EvalError> {
+	for arg in args {
+		println!("{}", arg);
+	}
+	Ok(OBJ_NULL)
 }
 
 //=== BUILTIN END ====
@@ -1559,6 +1570,10 @@ fn test_eval_statement_function_builtin() {
 		Test {
 			input: "push([3, 4], [1, 2])",
 			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(1), Object::INTEGER(2), Object::ARRAY(Array{elements: vec![Object::INTEGER(3), Object::INTEGER(4)]})]}),
+		},
+		Test {
+			input: r#"puts("Hello World!")"#,
+			expected: OBJ_NULL
 		},
 	];
 
