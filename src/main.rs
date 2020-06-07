@@ -55,6 +55,7 @@ fn main() {
 
 pub const STR_FUNCTION: &'static str = "FUNCTION";
 pub const STR_BUILTIN: &'static str = "BUILTIN";
+pub const STR_ARRAY: &'static str = "ARRAY";
 pub const STR_INTEGER: &'static str = "INTEGER";
 pub const STR_BOOLEAN: &'static str = "BOOLEAN";
 pub const STR_STRING: &'static str = "STRING";
@@ -85,6 +86,7 @@ impl fmt::Display for Function {
 pub enum Object {
 	FUNCTION(Function),
 	BUILTIN(Builtin),
+	ARRAY(Array),
 	INTEGER(isize),
 	BOOLEAN(bool),
 	STRING(String),
@@ -100,6 +102,10 @@ impl Object {
 
 	pub fn is_builtin(&self) -> bool {
 		self.get_type() == STR_BUILTIN
+	}
+
+	pub fn is_array(&self) -> bool {
+		self.get_type() == STR_ARRAY
 	}
 
 	pub fn is_integer(&self) -> bool {
@@ -130,6 +136,7 @@ impl Object {
 		match self {
 			Object::FUNCTION(_) => STR_FUNCTION,
 			Object::BUILTIN(_) => STR_BUILTIN,
+			Object::ARRAY(_) => STR_ARRAY,
 			Object::INTEGER(_) => STR_INTEGER,
 			Object::BOOLEAN(_) => STR_BOOLEAN,
 			Object::STRING(_) => STR_STRING,
@@ -145,6 +152,7 @@ impl fmt::Display for Object {
 		match self {
 			Object::FUNCTION(func) => func.fmt(f),
 			Object::BUILTIN(b) => b.fmt(f),
+			Object::ARRAY(a) => a.fmt(f),
 			Object::INTEGER(i) => write!(f, "{}", i),
 			Object::BOOLEAN(i) => write!(f, "{}", i),
 			Object::STRING(s) => write!(f, "{}", s),
@@ -170,6 +178,10 @@ fn test_objects() {
 		Test {
 			input: Object::BUILTIN(Builtin::LEN),
 			expected: "BUILTIN",
+		},
+		Test {
+			input: Object::ARRAY(Array{elements: vec![]}),
+			expected: "ARRAY",
 		},
 		Test {
 			input: Object::BOOLEAN(false),
@@ -200,6 +212,7 @@ fn test_objects() {
 		match test.input {
 			Object::FUNCTION(_) => assert_eq!(test.input.is_function(), true),
 			Object::BUILTIN(_) => assert_eq!(test.input.is_builtin(), true),
+			Object::ARRAY(_) => assert_eq!(test.input.is_array(), true),
 			Object::INTEGER(_) => assert_eq!(test.input.is_integer(), true),
 			Object::BOOLEAN(_) => assert_eq!(test.input.is_boolean(), true),
 			Object::STRING(_) => assert_eq!(test.input.is_string(), true),
@@ -219,13 +232,23 @@ fn test_objects() {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Builtin {
-	LEN
+	LEN,
+	FIRST,
+	LAST,
+	REST,
+	REVERSE,
+	PUSH,
 }
 
 impl fmt::Display for Builtin {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		match self {
-			Builtin::LEN => write!(f, "len")
+			Builtin::LEN => write!(f, "len"),
+			Builtin::FIRST => write!(f, "first"),
+			Builtin::LAST => write!(f, "last"),
+			Builtin::REST => write!(f, "rest"),
+			Builtin::REVERSE => write!(f, "reverse"),
+			Builtin::PUSH => write!(f, "push"),
 		}
 	}
 }
@@ -234,6 +257,11 @@ impl Builtin {
 	fn lookup(builtin: String) -> Option<Self> {
 		match builtin.as_str() {
 			"len" => Some(Builtin::LEN),
+			"first" => Some(Builtin::FIRST),
+			"last" => Some(Builtin::LAST),
+			"rest" => Some(Builtin::REST),
+			"reverse" => Some(Builtin::REVERSE),
+			"push" => Some(Builtin::PUSH),
 			_ => None
 		}
 	}
@@ -241,6 +269,11 @@ impl Builtin {
 	pub fn apply(&self, args: Vec<Object>) -> Result<Object, EvalError> {
 		match self {
 			Builtin::LEN => builtin_len(&args),
+			Builtin::FIRST => builtin_first(&args),
+			Builtin::LAST => builtin_last(&args),
+			Builtin::REST => builtin_rest(&args),
+			Builtin::REVERSE => builtin_reverse(&args),
+			Builtin::PUSH => builtin_push(&args),
 		}
 	}
 }
@@ -252,11 +285,124 @@ fn builtin_len(args: &[Object]) -> Result<Object, EvalError> {
 
 	match &args[0] {
 		Object::STRING(str) => Ok(Object::INTEGER(str.len() as isize)),
+		Object::ARRAY(a) => Ok(Object::INTEGER(a.elements.len() as isize)),
 		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::LEN, args[0].clone()))
 	}
 }
 
+fn builtin_first(args: &[Object]) -> Result<Object, EvalError> {
+	if args.len() != 1 {
+		return Err(EvalError::BUILTIN_ERROR_LEN(args.len()))
+	}
+
+	match &args[0] {
+		Object::ARRAY(a) => {
+			if !a.elements.is_empty() {
+				Ok(a.elements.first().unwrap().clone())
+			} else {
+				Ok(OBJ_NULL)
+			}
+		},
+		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::FIRST, args[0].clone()))
+	}
+}
+
+fn builtin_last(args: &[Object]) -> Result<Object, EvalError> {
+	if args.len() != 1 {
+		return Err(EvalError::BUILTIN_ERROR_LEN(args.len()))
+	}
+
+	match &args[0] {
+		Object::ARRAY(a) => {
+			if !a.elements.is_empty() {
+				Ok(a.elements.last().unwrap().clone())
+			} else {
+				Ok(OBJ_NULL)
+			}
+		},
+		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::LAST, args[0].clone()))
+	}
+}
+
+fn builtin_rest(args: &[Object]) -> Result<Object, EvalError> {
+	if args.len() != 1 {
+		return Err(EvalError::BUILTIN_ERROR_LEN(args.len()))
+	}
+
+	match &args[0] {
+		Object::ARRAY(a) => {
+			if !a.elements.is_empty() {
+				Ok(Object::ARRAY(Array{elements: a.elements.iter().skip(1).cloned().collect()}))
+			} else {
+				Ok(OBJ_NULL)
+			}
+		},
+		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::REST, args[0].clone()))
+	}
+}
+
+fn builtin_reverse(args: &[Object]) -> Result<Object, EvalError> {
+	if args.len() != 1 {
+		return Err(EvalError::BUILTIN_ERROR_LEN(args.len()))
+	}
+
+	match &args[0] {
+		Object::ARRAY(a) => {
+			if !a.elements.is_empty() {
+				Ok(Object::ARRAY(Array{elements: a.elements.clone().into_iter().rev().collect()}))
+			} else {
+				Ok(OBJ_NULL)
+			}
+		},
+		Object::STRING(str) => {
+			Ok(Object::STRING(str.chars().rev().collect::<String>()))
+		}
+		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::REVERSE, args[0].clone()))
+	}
+}
+
+fn builtin_push(args: &[Object]) -> Result<Object, EvalError> {
+	if args.len() != 2 {
+		return Err(EvalError::BUILTIN_ERROR_LEN(args.len()))
+	}
+
+	match (&args[0], &args[1]) {
+		(Object::ARRAY(a), Object::INTEGER(i)) | (Object::INTEGER(i), Object::ARRAY(a)) => {
+			let mut result = a.elements.clone();
+			result.push(Object::INTEGER(*i));
+
+			Ok(Object::ARRAY(Array{elements: result.clone()}))
+		}
+		(Object::ARRAY(l), Object::ARRAY(r)) => {
+			let mut result = r.elements.clone();
+			result.push(args[0].clone());
+
+			Ok(Object::ARRAY(Array{elements: result.clone()}))
+		}
+		_ => Err(EvalError::UNSUPPORTED_BUILTIN_USAGE(Builtin::PUSH, args[0].clone()))
+	}
+}
+
 //=== BUILTIN END ====
+
+
+//=== ARRAY BEGIN ====
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Array {
+	elements: Vec<Object>,
+}
+
+impl fmt::Display for Array {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		let elems = self.elements.iter().map(|o| format!("{}", o)).collect::<Vec<String>>();
+		write!(f, "[{}]", elems.join(", "))
+	}
+}
+
+
+//=== ARRAY END ====
+
 
 
 //=== ENVIRONMENT BEGIN ===
@@ -390,6 +536,8 @@ impl Evaluator {
 				Expression::IDENT(i) => self.eval_expression_ident(i),
 				Expression::FUNCTION(f) => self.eval_expression_function(f),
 				Expression::CALL(c) => self.eval_expression_call(c),
+				Expression::ARRAY(a) => self.eval_expression_array(a),
+				Expression::INDEX(i) => self.eval_expression_index(i),
 				_ => Err(EvalError::UNKNOWN_EXPRESSION(e))
 			}
 			_ => unimplemented!(),
@@ -564,6 +712,25 @@ impl Evaluator {
 		let func = self.eval(Node::EXPRESSION(*call.function))?;
 		let args = self.eval_expressions(call.arguments)?;
 		return self.apply_function(func, args);
+	}
+
+	fn eval_expression_array(&mut self, array: ArrayLiteral) -> Result<Object, EvalError> {
+		Ok(Object::ARRAY(Array{elements: self.eval_expressions(array.elements)?}))
+	}
+
+	fn eval_expression_index(&mut self, index: IndexExpression) -> Result<Object, EvalError> {
+		let left = self.eval(Node::EXPRESSION(*index.left))?;
+		let index = self.eval(Node::EXPRESSION(*index.index))?;
+
+		match (left, index) {
+			(Object::ARRAY(a), Object::INTEGER(i)) => {
+				match a.elements.get(i as usize) {
+					Some(e) => Ok(e.clone()),
+					None => Ok(OBJ_NULL),
+				}
+			}
+			_ => unimplemented!(),
+		}
 	}
 
 	fn apply_function(&mut self, func: Object, args: Vec<Object>) -> Result<Object, EvalError> {
@@ -883,6 +1050,62 @@ fn test_eval_expression_if_else() {
 }
 
 #[test]
+fn test_eval_expression_array_index() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: "[1, 2, 3][0]",
+			expected: Object::INTEGER(1),
+		},
+		Test {
+			input: "[1, 2, 3][1]",
+			expected: Object::INTEGER(2),
+		},
+		Test {
+			input: "[1, 2, 3][2]",
+			expected: Object::INTEGER(3),
+		},
+		Test {
+			input: "let i = 0; [1][i];",
+			expected: Object::INTEGER(1),
+		},
+		Test {
+			input: "[1, 2, 3][1 + 1];",
+			expected: Object::INTEGER(3),
+		},
+		Test {
+			input: "let myArray = [1, 2, 3]; myArray[2];",
+			expected: Object::INTEGER(3),
+		},
+		Test {
+			input: "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+			expected: Object::INTEGER(6),
+		},
+		Test {
+			input: "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]",
+			expected: Object::INTEGER(2),
+		},
+		Test {
+			input: "[1, 2, 3][3]",
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: "[1, 2, 3][-1]",
+			expected: OBJ_NULL,
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, test.expected);
+	}
+}
+
+#[test]
 fn test_eval_statement_return() {
 	struct Test<'a> {
 		input: &'a str,
@@ -1168,27 +1391,160 @@ fn test_eval_statement_function_call_closures() {
 fn test_eval_statement_function_builtin() {
 	struct Test<'a> {
 		input: &'a str,
-		expected: isize,
+		expected: Object,
 	}
 
 	let tests = vec![
 		Test {
 			input: r#"len("")"#,
-			expected: 0,
+			expected: Object::INTEGER(0),
 		},
 		Test {
 			input: r#"len("four")"#,
-			expected: 4,
+			expected: Object::INTEGER(4),
 		},
 		Test {
 			input: r#"len("hello world")"#,
-			expected: 11,
+			expected: Object::INTEGER(11),
+		},
+		Test {
+			input: "len([])",
+			expected: Object::INTEGER(0),
+		},
+		Test {
+			input: "len([1, 2, 3])",
+			expected: Object::INTEGER(3),
+		},
+		Test {
+			input: "first([])",
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: "first([7, 11, 13])",
+			expected: Object::INTEGER(7),
+		},
+		Test {
+			input: "last([])",
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: "last([7, 11, 13])",
+			expected: Object::INTEGER(13),
+		},
+		Test {
+			input: "rest([])",
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: "rest([7, 11, 13])",
+			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(11), Object::INTEGER(13)]}),
+		},
+		Test {
+			input: "reverse([])",
+			expected: OBJ_NULL,
+		},
+		Test {
+			input: "reverse([7, 11, 13])",
+			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(13), Object::INTEGER(11), Object::INTEGER(7)]}),
+		},
+		Test {
+			input: r#"reverse("Hello World!")"#,
+			expected: Object::STRING(String::from("!dlroW olleH")),
+		},
+		Test {
+			input: "push(1, [])",
+			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(1)]}),
+		},
+		Test {
+			input: "push(3, [1, 2])",
+			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(1), Object::INTEGER(2), Object::INTEGER(3)]}),
+		},
+		Test {
+			input: "push([1, 2], 3)",
+			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(1), Object::INTEGER(2), Object::INTEGER(3)]}),
+		},
+		Test {
+			input: "push([3, 4], [1, 2])",
+			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(1), Object::INTEGER(2), Object::ARRAY(Array{elements: vec![Object::INTEGER(3), Object::INTEGER(4)]})]}),
 		},
 	];
 
 	for test in tests {
 		let evaluated = test_eval(test.input).unwrap();
-		assert_eq!(evaluated, Object::INTEGER(test.expected));
+		assert_eq!(evaluated, test.expected);
+	}
+}
+
+#[test]
+fn test_eval_statement_function_builtin_integration() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Object,
+	}
+
+	let tests = vec![
+		Test {
+			input: r#"
+			let map = fn(arr, f) {
+				let iter = fn(arr, accumulated) {
+					if (len(arr) == 0) {
+						accumulated
+					} else {
+						iter(rest(arr), push(accumulated, f(first(arr))));
+					}
+				};
+				iter(arr, []);
+			};
+			let a = [1, 2, 3, 4];
+			let double = fn(x) { x * 2 };
+			map(a, double);
+			"#,
+			expected: Object::ARRAY(Array{elements: vec![Object::INTEGER(2), Object::INTEGER(4), Object::INTEGER(6), Object::INTEGER(8)]}),
+		},
+		Test {
+			input: r#"
+			let reduce = fn(arr, initial, f) {
+				let iter = fn(arr, result) {
+					if (len(arr) == 0) {
+						result
+					} else {
+						iter(rest(arr), f(result, first(arr)));
+					}
+				};
+				iter(arr, initial);
+			};
+			let sum = fn(arr) {
+				reduce(arr, 0, fn(initial, el) { initial + el });
+			};
+			sum([1, 2, 3, 4, 5]);
+			"#,
+			expected: Object::INTEGER(15),
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, test.expected);
+	}
+}
+
+#[test]
+fn test_eval_statement_function_array() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Array,
+	}
+
+	let tests = vec![
+		Test {
+			input: "[1, 2 * 2, 3 + 3]",
+			expected: Array{elements: vec![Object::INTEGER(1), Object::INTEGER(4), Object::INTEGER(6)]},
+		},
+	];
+
+	for test in tests {
+		let evaluated = test_eval(test.input).unwrap();
+		assert_eq!(evaluated, Object::ARRAY(test.expected));
 	}
 }
 
@@ -1221,12 +1577,39 @@ impl fmt::Display for Literal {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ArrayLiteral {
+	elements: Vec<Expression>
+}
+
+impl fmt::Display for ArrayLiteral {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		let elems: Vec<String> = self.elements.iter().map(|e| e.to_string()).collect::<Vec<String>>();
+		write!(f, "[{}]", elems.join(", "))
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IndexExpression {
+	left: Box<Expression>,
+	index: Box<Expression>,
+}
+
+impl fmt::Display for IndexExpression {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "({}[{}])", self.left, self.index)
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
 	IDENT(String),
 	LITERAL(Literal),
 
+	ARRAY(ArrayLiteral),
+
 	PREFIX(PrefixExpression),
 	INFIX(InfixExpression),
+	INDEX(IndexExpression),
 
 	IF(IfExpression),
 	FUNCTION(FunctionLiteral),
@@ -1238,8 +1621,10 @@ impl fmt::Display for Expression {
 		match self {
 			Expression::IDENT(i) => i.fmt(f),
 			Expression::LITERAL(i) => i.fmt(f),
+			Expression::ARRAY(i) => i.fmt(f),
 			Expression::PREFIX(i) => i.fmt(f),
 			Expression::INFIX(i) => i.fmt(f),
+			Expression::INDEX(i) => i.fmt(f),
 			Expression::IF(i) => i.fmt(f),
 			Expression::FUNCTION(i) => i.fmt(f),
 			Expression::CALL(i) => i.fmt(f),
@@ -1590,6 +1975,14 @@ fn test_ast_operator_precedence_call() {
 		Test {
 			input: "add(a + b + c * d / f + g)",
 			expected: "add((((a + b) + ((c * d) / f)) + g))",
+		},
+		Test {
+			input: "a * [1, 2, 3, 4][b * c] * d",
+			expected: "((a * ([1, 2, 3, 4][(b * c)])) * d)",
+		},
+		Test {
+			input: "add(a * b[2], b[1], 2 * [1, 2][1])",
+			expected: "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
 		},
 	];
 
@@ -1945,7 +2338,6 @@ fn test_parse_statement_expression_call() {
 								left: Box::new(Expression::LITERAL(Literal::INT(4))),
 								operator: InfixType::PLUS,
 								right: Box::new(Expression::LITERAL(Literal::INT(5))),
-
 							}
 						)
 					],
@@ -1957,6 +2349,74 @@ fn test_parse_statement_expression_call() {
 	assert_eq!(actual.statements, expecteds);
 }
 
+#[test]
+fn test_parse_statement_expression_array() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Statement,
+	}
+
+	let tests = vec![
+		Test {
+			input: "[1, 2 * 2, 3 + 3]",
+			expected: Statement::EXPRESSION(Expression::ARRAY(ArrayLiteral{
+				elements: vec![
+					Expression::LITERAL(Literal::INT(1)),
+					Expression::INFIX(InfixExpression{
+						left: Box::new(Expression::LITERAL(Literal::INT(2))),
+						operator: InfixType::MULTIPLICATION,
+						right: Box::new(Expression::LITERAL(Literal::INT(2))),
+					}),
+					Expression::INFIX(InfixExpression{
+						left: Box::new(Expression::LITERAL(Literal::INT(3))),
+						operator: InfixType::PLUS,
+						right: Box::new(Expression::LITERAL(Literal::INT(3))),
+					}),
+				]
+			})),
+		},
+	];
+
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		if let Some(stmt) = actual.statements.first() {
+			assert_eq!(*stmt, test.expected);
+		} else {
+			assert!(false);
+		};
+	}
+}
+
+#[test]
+fn test_parse_statement_expression_index() {
+	struct Test<'a> {
+		input: &'a str,
+		expected: Statement,
+	}
+
+	let tests = vec![
+		Test {
+			input: "myArray[5 + 7]",
+			expected: Statement::EXPRESSION(Expression::INDEX(IndexExpression{
+				left: Box::new(Expression::IDENT(String::from("myArray"))),
+				index: Box::new(Expression::INFIX(InfixExpression{
+					left: Box::new(Expression::LITERAL(Literal::INT(5))),
+					operator: InfixType::PLUS,
+					right: Box::new(Expression::LITERAL(Literal::INT(7)))
+				}))
+			}))
+		},
+	];
+
+	for test in tests {
+		let (actual, errs) = Parser::new(Lexer::new(test.input.to_owned())).parse();
+		if let Some(stmt) = actual.statements.first() {
+			assert_eq!(*stmt, test.expected);
+		} else {
+			assert!(false);
+		};
+	}
+}
 
 type ParserPrefixFunc = fn(&mut Parser) -> Result<Expression, ParserError>;
 type ParserInfixFunc = fn(&mut Parser, Expression) -> Result<Expression, ParserError>;
@@ -2016,6 +2476,8 @@ enum Precedence {
 	PREFIX,
 	// func(X)
 	CALL,
+	// index[]
+	INDEX
 }
 
 fn get_precedence_for_token_type(token: &Token) -> Precedence {
@@ -2029,6 +2491,7 @@ fn get_precedence_for_token_type(token: &Token) -> Precedence {
 		Token::SLASH => Precedence::PRODUCT,
 		Token::ASTERISK => Precedence::PRODUCT,
 		Token::LPAREN => Precedence::CALL,
+		Token::LBRACKET => Precedence::INDEX,
 		_ => Precedence::LOWEST,
 	}
 }
@@ -2265,6 +2728,7 @@ impl Parser {
 			Token::LPAREN => Parser::parse_expression_grouped,
 			Token::IF => Parser::parse_expression_if,
 			Token::FUNCTION => Parser::parse_literal_function,
+			Token::LBRACKET => Parser::parse_expression_array,
 			_ => return None
 		})
 	}
@@ -2280,6 +2744,7 @@ impl Parser {
 			| Token::LT
 			| Token::GT => Parser::parse_expression_infix,
 			Token::LPAREN => Parser::parse_expression_call,
+			Token::LBRACKET => Parser::parse_expression_index,
 			_ => return None
 		})
 	}
@@ -2296,6 +2761,36 @@ impl Parser {
 		}
 
 		Ok(left_exp)
+	}
+
+
+	fn parse_expression_array(&mut self) -> Result<Expression, ParserError> {
+		let elems = self.parse_expression_list(Token::RBRACKET)?;
+		Ok(Expression::ARRAY(ArrayLiteral{elements: elems}))
+	}
+
+	fn parse_expression_list(&mut self, end: Token) -> Result<Vec<Expression>, ParserError> {
+		let mut list: Vec<Expression> = vec![];
+
+		if self.peek_token == end {
+			self.next_token();
+			return Ok(list)
+		}
+
+		self.next_token();
+
+		list.push(self.parse_expression(Precedence::LOWEST)?);
+
+		while self.peek_token_is(Token::COMMA) {
+			self.next_token();
+			self.next_token();
+
+			list.push(self.parse_expression(Precedence::LOWEST)?);
+		}
+
+		self.expect_peek(end)?;
+
+		Ok(list)
 	}
 
 	fn parse_expression_prefix(&mut self) -> Result<Expression, ParserError> {
@@ -2337,7 +2832,7 @@ impl Parser {
 	}
 
 	fn parse_expression_call(&mut self, function: Expression) -> Result<Expression, ParserError> {
-		let args = self.parse_expression_call_arguments()?;
+		let args = self.parse_expression_list(Token::RPAREN)?;
 		Ok(
 			Expression::CALL(
 				CallExpression {
@@ -2348,28 +2843,14 @@ impl Parser {
 		)
 	}
 
-	fn parse_expression_call_arguments(&mut self) -> Result<Vec<Expression>, ParserError> {
-		let mut arguments = vec![];
-
-		if self.peek_token_is(Token::RPAREN) {
-			self.next_token();
-			return Ok(arguments);
-		}
-
+	fn parse_expression_index(&mut self, left: Expression) -> Result<Expression, ParserError> {
 		self.next_token();
 
-		arguments.push(self.parse_expression(Precedence::LOWEST)?);
+		let index = self.parse_expression(Precedence::LOWEST)?;
 
-		while self.peek_token_is(Token::COMMA) {
-			self.next_token();
-			self.next_token();
+		self.expect_peek(Token::RBRACKET)?;
 
-			arguments.push(self.parse_expression(Precedence::LOWEST)?);
-		}
-
-		self.expect_peek(Token::RPAREN)?;
-
-		Ok(arguments)
+		Ok(Expression::INDEX(IndexExpression{left: Box::new(left), index: Box::new(index)}))
 	}
 
 	fn parse_expression_grouped(&mut self) -> Result<Expression, ParserError> {
@@ -2581,6 +3062,27 @@ fn test_next_token_string() {
 	}
 }
 
+#[test]
+fn test_next_token_array() {
+	let input = "[1, 2];";
+
+	let expected = vec![
+		Token::LBRACKET,
+		Token::INT(1),
+		Token::COMMA,
+		Token::INT(2),
+		Token::RBRACKET,
+		Token::SEMICOLON,
+		Token::EOF,
+	];
+
+	let mut l = Lexer::new(input.to_owned());
+	for i in expected {
+		let t = l.next_token();
+		assert_eq!(t, i);
+	}
+}
+
 
 struct Lexer {
 	//current input string
@@ -2668,6 +3170,8 @@ impl Lexer {
 			',' => t = Token::COMMA,
 			'{' => t = Token::LBRACE,
 			'}' => t = Token::RBRACE,
+			'[' => t = Token::LBRACKET,
+			']' => t = Token::RBRACKET,
 			'"' => t = Token::STRING(self.read_string()),
 			'\0' => t = Token::EOF,
 			'\t' => t = Token::TAB,
@@ -2767,6 +3271,8 @@ pub enum Token {
 	RPAREN,
 	LBRACE,
 	RBRACE,
+	LBRACKET,
+	RBRACKET,
 
 	FUNCTION,
 	LET,
@@ -2813,6 +3319,8 @@ impl fmt::Display for Token {
 			Token::RPAREN => write!(f, ")"),
 			Token::LBRACE => write!(f, "{{"),
 			Token::RBRACE => write!(f, "}}"),
+			Token::LBRACKET => write!(f, "["),
+			Token::RBRACKET => write!(f, "]"),
 
 			Token::FUNCTION => write!(f, "FUNCTION"),
 			Token::LET => write!(f, "LET"),
