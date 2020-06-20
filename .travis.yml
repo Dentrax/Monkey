@@ -1,0 +1,17 @@
+language: rust
+rust:
+  - 1.43.0
+  - stable
+  - nightly
+sudo: false
+env:
+  global:
+    - RUSTFLAGS="--deny warnings"
+    - RUST_BACKTRACE=1
+    - CARGO_INCREMENTAL=0
+script:
+  - cargo test --all
+  - cargo build
+notifications:
+  email:
+    on_success: never
