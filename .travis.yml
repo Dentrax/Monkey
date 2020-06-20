@@ -6,12 +6,11 @@ rust:
 sudo: false
 env:
   global:
-    - RUSTFLAGS="--deny warnings"
     - RUST_BACKTRACE=1
     - CARGO_INCREMENTAL=0
 script:
-  - cargo test --all
-  - cargo build
+  - cargo test --all --verbose
+  - cargo build --verbose
 notifications:
   email:
     on_success: never

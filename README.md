@@ -15,13 +15,16 @@
 
 ## Usage
 
-### Test
+### 1. Install [rustup](https://rustup.rs/)
+
+
+### 2. Test
 
 ```rust
 cargo test --all
 ```
 
-### Run
+### 3. Run
 
 ```rust
 cargo run
