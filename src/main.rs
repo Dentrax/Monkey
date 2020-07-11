@@ -6,6 +6,7 @@ mod types;
 mod token;
 mod repl;
 mod code;
+mod compiler;
 
 use std::env;
 

@@ -2,8 +2,44 @@ extern crate byteorder;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::error::Error;
 use std::{fmt, convert};
+use self::byteorder::ByteOrder;
 
 pub type Instructions = Vec<u8>;
+
+pub trait IInstructions {
+	fn string(&self) -> String;
+	fn fmt_instruction(&self, def: &Definition, operands: &Vec<usize>) -> String;
+}
+
+impl IInstructions for Instructions {
+	fn string(&self) -> String {
+		let mut out = String::new();
+		let mut i = 0;
+
+		while i < self.len() {
+			if let Some(v) = self.get(i) {
+				let def = lookup(OpCodeType::from(*v));
+
+				let (operands, read) = read_operands(&def, &self[i + 1..]);
+
+				let fmt = self.fmt_instruction(&def, &operands);
+
+				out.push_str(&format!("{:04} {}\n", i, fmt));
+
+				i += 1 + read;
+			}
+		}
+
+		out
+	}
+
+	fn fmt_instruction(&self, def: &Definition, operands: &Vec<usize>) -> String {
+		match def.operandWidths.len() {
+			1 => format!("{} {}", def.name, operands[0]),
+			_ => panic!("unexpected operandWidths len: {}", def.operandWidths.len())
+		}
+	}
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CodeError {
@@ -35,12 +71,12 @@ impl From<u8> for OpCodeType {
 }
 
 #[derive(Debug)]
-struct Definition<'a> {
+pub struct Definition<'a> {
 	name: &'a str,
 	operandWidths: Vec<u8>,
 }
 
-fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
+pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 	match op {
 		OpCodeType::CONSTANT => Definition {
 			name: "OpConstant",
@@ -49,7 +85,7 @@ fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 	}
 }
 
-pub fn make(op: OpCodeType, operands: Vec<usize>) -> Result<Vec<u8>, CodeError> {
+pub fn make(op: OpCodeType, operands: &Vec<usize>) -> Result<Vec<u8>, CodeError> {
 	let definition = lookup(op);
 
 	let capacity: usize = definition.operandWidths.iter().map(|w| *w as usize).sum::<usize>(); //usize
@@ -77,4 +113,22 @@ pub fn make(op: OpCodeType, operands: Vec<usize>) -> Result<Vec<u8>, CodeError> 
 	}
 
 	Ok(instructions)
+}
+
+pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<usize>, usize) {
+	let mut operands: Vec<usize> = Vec::with_capacity(def.operandWidths.len());
+	let mut offset: usize = 0;
+
+	for (i, width) in def.operandWidths.iter().enumerate() {
+		match width {
+			2 => {
+				let value = BigEndian::read_u16(&ins[offset..]);
+				operands.push(value as usize);
+			}
+			_ => panic!("unexpected width {}", width)
+		}
+		offset += *width as usize;
+	}
+
+	(operands, offset)
 }
