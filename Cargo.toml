@@ -5,3 +5,6 @@ authors = ["Furkan <furkan.turkal@hotmail.com>"]
 edition = "2018"
 keywords = ["interpreter"]
 license = "MIT"
+
+[dependencies]
+byteorder = "1.3.4"
