@@ -132,3 +132,7 @@ pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<usize>, usize) {
 
 	(operands, offset)
 }
+
+pub fn read_uint16(ins: &[u8]) -> usize {
+	BigEndian::read_u16(ins) as usize
+}

@@ -22,6 +22,7 @@ fn test_integer_arithmetic() {
 				Object::INTEGER(2)],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
 			]
 		},
 	];

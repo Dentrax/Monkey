@@ -7,6 +7,7 @@ mod token;
 mod repl;
 mod code;
 mod compiler;
+mod vm;
 
 use std::env;
 
