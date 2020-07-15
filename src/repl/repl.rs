@@ -7,6 +7,8 @@ use crate::types::object::*;
 use std::io;
 use std::process;
 use std::io::prelude::*;
+use crate::compiler::compiler::Compiler;
+use crate::vm::vm::VM;
 
 const PROMPT: &str = ">>> ";
 
@@ -38,18 +40,33 @@ pub fn start() {
 					continue;
 				}
 
-				match evaluator.eval(Node::PROGRAM(program)) {
-					Ok(o) => {
-						match o {
-							Object::NULL => {}
-							_ => println!("{}", o)
-						}
+				//VM
+				let mut comp = Compiler::new();
+				match comp.compile(Node::PROGRAM(program)) {
+					Ok(b) => {
+						let mut machine = VM::new(&b);
+						machine.run();
+						println!("{}", machine.stack_top().unwrap());
 					}
 					Err(e) => {
-						println!("EvalError: {}", e);
+						println!("Compilation failed: {}", e);
 						continue;
 					}
 				}
+
+				//EVALUATOR
+				// match evaluator.eval(Node::PROGRAM(program)) {
+				// 	Ok(o) => {
+				// 		match o {
+				// 			Object::NULL => {}
+				// 			_ => println!("{}", o)
+				// 		}
+				// 	}
+				// 	Err(e) => {
+				// 		println!("EvalError: {}", e);
+				// 		continue;
+				// 	}
+				// }
 			}
 			Err(e) => {
 				println!("StdinErr: {}", e);

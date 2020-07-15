@@ -68,7 +68,7 @@ impl Compiler {
 		}
 	}
 
-	pub fn compile(&mut self, node: Node) -> Result<(), CompilerError> {
+	pub fn compile(&mut self, node: Node) -> Result<Bytecode, CompilerError> {
 		match node {
 			Node::PROGRAM(p) => {
 				self.compile_program(&p)?;
@@ -80,7 +80,7 @@ impl Compiler {
 				self.compile_statement(&s)?;
 			}
 		}
-		Ok(())
+		Ok(self.bytecode())
 	}
 
 	fn compile_program(&mut self, p: &ast::Program) -> Result<(), CompilerError> {
