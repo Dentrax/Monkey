@@ -105,6 +105,13 @@ impl Compiler {
 	fn compile_expression(&mut self, expr: &ast::Expression) -> Result<(), CompilerError> {
 		match expr {
 			ast::Expression::INFIX(i) => {
+				if i.operator == InfixType::LT {
+					self.compile_expression(&i.right)?;
+					self.compile_expression(&i.left)?;
+					self.emit(OpCodeType::GT, &vec![]);
+					return Ok(())
+				}
+
 				self.compile_expression(&i.left)?;
 				self.compile_expression(&i.right)?;
 
@@ -120,6 +127,15 @@ impl Compiler {
 					},
 					InfixType::MULTIPLICATION => {
 						self.emit(OpCodeType::MUL, &vec![]);
+					},
+					InfixType::EQ => {
+						self.emit(OpCodeType::EQ, &vec![]);
+					},
+					InfixType::NEQ => {
+						self.emit(OpCodeType::NEQ, &vec![]);
+					},
+					InfixType::GT => {
+						self.emit(OpCodeType::GT, &vec![]);
 					},
 					_ => return Err(CompilerError::UNKNOWN_INFIX_OPERATOR(i.operator.clone()))
 				}

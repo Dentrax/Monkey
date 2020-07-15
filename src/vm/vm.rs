@@ -1,5 +1,5 @@
 use crate::types::object::{Object, OBJ_NULL, OBJ_TRUE, OBJ_FALSE};
-use crate::code::code::{Instructions, OpCodeType, read_uint16, lookup};
+use crate::code::code::{Instructions, OpCodeType, read_uint16};
 use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
 
@@ -58,6 +58,9 @@ impl<'a> VM<'a> {
 				OpCodeType::FALSE => {
 					self.push(OBJ_FALSE);
 				}
+				OpCodeType::EQ | OpCodeType::NEQ | OpCodeType::GT => {
+					self.execute_comparison(op);
+				}
 				OpCodeType::POP => {
 					self.pop();
 				},
@@ -90,6 +93,42 @@ impl<'a> VM<'a> {
 		};
 
 		self.push(Object::INTEGER(result));
+	}
+
+	fn execute_comparison(&mut self, op: OpCodeType) { //TODO: return err
+		let right = self.pop().to_owned(); //FIXME: cloning
+		let left = self.pop().to_owned();
+
+		match (right.borrow(), left.borrow()) {
+			(Object::INTEGER(r), Object::INTEGER(l)) => {
+				self.execute_comparison_integer(op, *l, *r);
+			},
+			(Object::BOOLEAN(r), Object::BOOLEAN(l)) => {
+				self.execute_comparison_boolean(op, *l, *r);
+			},
+			_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
+		}
+	}
+
+	fn execute_comparison_integer(&mut self, op: OpCodeType, left: isize, right: isize) {
+		let result = match op {
+			OpCodeType::EQ => left == right,
+			OpCodeType::NEQ => left != right,
+			OpCodeType::GT => left > right,
+			_ => panic!("unknown integer comparison operator: {:?}", op)
+		};
+
+		self.push(Object::BOOLEAN(result));
+	}
+
+	fn execute_comparison_boolean(&mut self, op: OpCodeType, left: bool, right: bool) {
+		let result = match op {
+			OpCodeType::EQ => left == right,
+			OpCodeType::NEQ => left != right,
+			_ => panic!("unknown boolean comparison operator: {:?}", op)
+		};
+
+		self.push(Object::BOOLEAN(result));
 	}
 
 	fn push(&mut self, o: Object) {

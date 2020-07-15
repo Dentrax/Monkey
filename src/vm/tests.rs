@@ -77,6 +77,74 @@ fn test_expression_boolean() {
 			input: "false",
 			expected: Object::BOOLEAN(false)
 		},
+		VMTestCase {
+			input: "1 < 2",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "1 > 2",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "1 < 1",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "1 > 1",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "1 == 1",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "1 != 1",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "1 == 2",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "1 != 2",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "true == true",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "false == false",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "true == false",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "true != false",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "false != true",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "(1 < 2) == true",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "(1 < 2) == false",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "(1 > 2) == true",
+			expected: Object::BOOLEAN(false)
+		},
+		VMTestCase {
+			input: "(1 > 2) == false",
+			expected: Object::BOOLEAN(true)
+		},
 	];
 
 	run_vm_tests(tests);
@@ -90,16 +158,21 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
 
 		let mut compiler = Compiler::new();
 
-		compiler.compile(PROGRAM(program));
+		match compiler.compile(PROGRAM(program)) {
+			Ok(o) => {
+				let bytecode = compiler.bytecode();
 
-		let bytecode = compiler.bytecode();
+				let mut vm = VM::new(&bytecode);
 
-		let mut vm = VM::new(&bytecode);
+				vm.run();
 
-		vm.run();
-
-		if let Some(e) = vm.last_popped_stack_elem() {
-			test_expected_object(&t.expected, e);
+				if let Some(e) = vm.last_popped_stack_elem() {
+					test_expected_object(&t.expected, e);
+				}
+			},
+			Err(e) => {
+				panic!("VM error: {}", e)
+			}
 		}
 	}
 }
