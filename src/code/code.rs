@@ -35,6 +35,7 @@ impl IInstructions for Instructions {
 
 	fn fmt_instruction(&self, def: &Definition, operands: &Vec<usize>) -> String {
 		match def.operandWidths.len() {
+			0 => format!("{}", def.name),
 			1 => format!("{} {}", def.name, operands[0]),
 			_ => panic!("unexpected operandWidths len: {}", def.operandWidths.len())
 		}
@@ -59,13 +60,15 @@ impl fmt::Display for CodeError {
 #[derive(Clone, Copy)]
 pub enum OpCodeType {
 	CONSTANT = 0,
+	ADD = 1,
 }
 
 impl From<u8> for OpCodeType {
 	fn from(v: u8) -> Self {
 		match v {
 			0 => OpCodeType::CONSTANT,
-			_ => panic!("unhandled u8 to Opcode conversion: {}", v),
+			1 => OpCodeType::ADD,
+			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
 }
@@ -81,22 +84,22 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		OpCodeType::CONSTANT => Definition {
 			name: "OpConstant",
 			operandWidths: vec![2],
+		},
+		OpCodeType::ADD => Definition {
+			name: "OpAdd",
+			operandWidths: vec![],
 		}
 	}
 }
 
 pub fn make(op: OpCodeType, operands: &Vec<usize>) -> Result<Vec<u8>, CodeError> {
 	let definition = lookup(op);
-
 	let capacity: usize = definition.operandWidths.iter().map(|w| *w as usize).sum::<usize>(); //usize
 
 	let mut instructions = Vec::with_capacity(1 + capacity);
 	instructions.push(op as u8);
 
-	let mut offset = 1;
-	for (i, operand) in operands.iter().enumerate() {
-		let width = definition.operandWidths[i];
-
+	for (operand, width) in operands.into_iter().zip(definition.operandWidths) {
 		match width {
 			2 => match instructions.write_u16::<BigEndian>(*operand as u16) {
 				Err(e) => {
@@ -108,8 +111,6 @@ pub fn make(op: OpCodeType, operands: &Vec<usize>) -> Result<Vec<u8>, CodeError>
 				return Err(CodeError::UNEXPECTED_WIDTH(width))
 			}
 		}
-
-		offset += width;
 	}
 
 	Ok(instructions)

@@ -1,5 +1,5 @@
 use crate::types::object::Object;
-use crate::code::code::{Instructions, make, OpCodeType};
+use crate::code::code::{Instructions, make, OpCodeType, IInstructions};
 use crate::parser::parser::Parser;
 use crate::lexer::lexer::Lexer;
 use crate::compiler::compiler::{Compiler, CompilerError};
@@ -23,6 +23,7 @@ fn test_integer_arithmetic() {
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::ADD, &vec![]).unwrap(),
 			]
 		},
 	];
@@ -58,7 +59,7 @@ fn test_instructions(expected: &Vec<Instructions>, actual: &Instructions) -> Res
 	let concatted = concat_instructions(expected);
 
 	if actual.len() != concatted.len() {
-		return Err(CompilerError::WRONG_INSTRUCTIONS_LENGTH { want: concatted.len(), got: actual.len() })
+		return Err(CompilerError::WRONG_INSTRUCTIONS_LENGTH { want: concatted.string(), got: actual.string() })
 	}
 
 	for (i, ins) in concatted.iter().enumerate() {

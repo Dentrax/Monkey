@@ -1,6 +1,7 @@
 use crate::types::object::{Object, OBJ_NULL};
 use crate::code::code::{Instructions, OpCodeType, read_uint16};
 use crate::compiler::compiler::Bytecode;
+use std::borrow::Borrow;
 
 const STACK_SIZE: usize = 2048;
 
@@ -47,6 +48,20 @@ impl<'a> VM<'a> {
 
 					self.push(self.constants[const_index].clone()); //FIXME: do not clone?
 				}
+				OpCodeType::ADD => {
+					let right = self.pop().to_owned(); //FIXME: cloning
+					let left = self.pop().to_owned();
+
+					match (right.borrow(), left.borrow()) {
+						(Object::INTEGER(r), Object::INTEGER(l)) => {
+							let res = r + l;
+							self.push(Object::INTEGER(res));
+						}
+						_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
+					}
+
+				}
+				_ => panic!("unexpected OpCodeType: {}", op)
 			}
 
 			ip += 1;
@@ -60,5 +75,11 @@ impl<'a> VM<'a> {
 
 		self.stack[self.sp] = o;
 		self.sp += 1;
+	}
+
+	fn pop(&mut self) -> &Object {
+		let o = &self.stack[self.sp - 1];
+		self.sp -= 1;
+		o
 	}
 }

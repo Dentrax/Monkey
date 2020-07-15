@@ -4,7 +4,7 @@ use std::error::Error;
 use crate::ast::ast;
 use std::fmt::{Display, Formatter};
 use std::fmt;
-use crate::ast::ast::{Program, Node};
+use crate::ast::ast::{Program, Node, InfixType, Literal, Expression};
 
 pub struct Compiler {
 	instructions: Instructions,
@@ -17,7 +17,10 @@ pub enum CompilerError {
 	WRONG_NUMBER_OF_CONSTANTS { want: usize, got: usize },
 	WRONG_CONSTANTS_INTEGER_EQUALITY{ want: isize, got: isize },
 	WRONG_INSTRUCTION_AT { at: usize, want: Vec<u8>, got: Vec<u8> },
-	WRONG_INSTRUCTIONS_LENGTH { want: usize, got: usize },
+	WRONG_INSTRUCTIONS_LENGTH { want: String, got: String },
+	UNKNOWN_INFIX_OPERATOR(InfixType),
+	UNKNOWN_EXPRESSION_LITERAL(Literal),
+	UNKNOWN_EXPRESSION(Expression),
 }
 
 impl fmt::Display for CompilerError {
@@ -36,7 +39,16 @@ impl fmt::Display for CompilerError {
 				write!(f, "wrong instruction: at: {} got: {:#?} want: {:#?}", at, got, want)
 			},
 			CompilerError::WRONG_INSTRUCTIONS_LENGTH { want, got } => {
-				write!(f, "wrong instructions length: got: {} want: {}", got, want)
+				write!(f, "wrong instructions length:\ngot:\n{:#?}\nwant:\n{:#?}", got, want)
+			},
+			CompilerError::UNKNOWN_INFIX_OPERATOR(t) => {
+				write!(f, "unknown infix operator: {}", t.to_string())
+			},
+			CompilerError::UNKNOWN_EXPRESSION_LITERAL(l) => {
+				write!(f, "unknown expression literal: {}", l.to_string())
+			},
+			CompilerError::UNKNOWN_EXPRESSION(e) => {
+				write!(f, "unknown expression: {}", e.to_string())
 			},
 		}
 	}
@@ -84,7 +96,7 @@ impl Compiler {
 			ast::Statement::EXPRESSION(e) => {
 				self.compile_expression(e)?;
 			}
-			_ => {}
+			_ => panic!("[compile::statement]: Unexpected statement: {}", stmt.to_string())
 		}
 		Ok(())
 	}
@@ -94,6 +106,13 @@ impl Compiler {
 			ast::Expression::INFIX(i) => {
 				self.compile_expression(&i.left)?;
 				self.compile_expression(&i.right)?;
+
+				match i.operator {
+					InfixType::PLUS => {
+						let p = self.emit(OpCodeType::ADD, &vec![]);
+					},
+					_ => return Err(CompilerError::UNKNOWN_INFIX_OPERATOR(i.operator.clone()))
+				}
 			},
 			ast::Expression::LITERAL(l) => {
 				match l {
@@ -102,11 +121,11 @@ impl Compiler {
 						let ops = &vec![self.add_constant(integer)];
 						let p = self.emit(OpCodeType::CONSTANT, ops);
 					}
-					_ => {},
+					_ => return Err(CompilerError::UNKNOWN_EXPRESSION_LITERAL(l.clone()))
 				};
 			}
-			_ => {},
-		}
+			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
+		};
 		Ok(())
 	}
 

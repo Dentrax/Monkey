@@ -17,6 +17,12 @@ fn test_make() {
 			expected: vec![OpCodeType::CONSTANT as u8, 0xFF, 0xFE],
 			expectedErr: None,
 		},
+		Test {
+			op: OpCodeType::ADD,
+			operands: vec![],
+			expected: vec![OpCodeType::ADD as u8],
+			expectedErr: None,
+		},
 	];
 
 	for test in tests {
@@ -62,11 +68,11 @@ fn test_string() {
 	let tests = vec![
 		Test {
 			instructions: vec![
-				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::ADD, &vec![]).unwrap(),
 				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
 				make(OpCodeType::CONSTANT, &vec![65535]).unwrap(),
 			],
-			expected: "0000 OpConstant 1\n0003 OpConstant 2\n0006 OpConstant 65535\n",
+			expected: "0000 OpAdd\n0001 OpConstant 2\n0004 OpConstant 65535\n",
 		},
 	];
 

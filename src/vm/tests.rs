@@ -23,7 +23,7 @@ fn test_integer_arithmetic() {
 		},
 		VMTestCase {
 			input: "1 + 2",
-			expected: Object::INTEGER(2) //FIXME
+			expected: Object::INTEGER(3)
 		},
 	];
 
@@ -46,7 +46,6 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
 
 		vm.run();
 
-		//let stack_elem = vm.stack_top();
 		if let Some(e) = vm.stack_top() {
 			test_expected_object(&t.expected, e);
 		}
