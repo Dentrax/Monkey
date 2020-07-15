@@ -47,7 +47,7 @@ impl<'a> VM<'a> {
 					ip += 2;
 
 					self.push(self.constants[const_index].clone()); //FIXME: do not clone?
-				}
+				},
 				OpCodeType::ADD => {
 					let right = self.pop().to_owned(); //FIXME: cloning
 					let left = self.pop().to_owned();
@@ -59,8 +59,10 @@ impl<'a> VM<'a> {
 						}
 						_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
 					}
-
-				}
+				},
+				OpCodeType::POP => {
+					self.pop();
+				},
 				_ => panic!("unexpected OpCodeType: {}", op)
 			}
 
@@ -81,5 +83,9 @@ impl<'a> VM<'a> {
 		let o = &self.stack[self.sp - 1];
 		self.sp -= 1;
 		o
+	}
+
+	pub fn last_popped_stack_elem(&self) -> Option<&Object> {
+		self.stack.get(self.sp)
 	}
 }

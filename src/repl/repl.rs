@@ -46,7 +46,7 @@ pub fn start() {
 					Ok(b) => {
 						let mut machine = VM::new(&b);
 						machine.run();
-						println!("{}", machine.stack_top().unwrap());
+						println!("{}", machine.last_popped_stack_elem().unwrap());
 					}
 					Err(e) => {
 						println!("Compilation failed: {}", e);

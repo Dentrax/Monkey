@@ -95,6 +95,7 @@ impl Compiler {
 		match stmt {
 			ast::Statement::EXPRESSION(e) => {
 				self.compile_expression(e)?;
+				self.emit(OpCodeType::POP, &vec![]);
 			}
 			_ => panic!("[compile::statement]: Unexpected statement: {}", stmt.to_string())
 		}

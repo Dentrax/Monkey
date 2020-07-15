@@ -61,6 +61,7 @@ impl fmt::Display for CodeError {
 pub enum OpCodeType {
 	CONSTANT = 0,
 	ADD = 1,
+	POP = 2,
 }
 
 impl From<u8> for OpCodeType {
@@ -68,6 +69,7 @@ impl From<u8> for OpCodeType {
 		match v {
 			0 => OpCodeType::CONSTANT,
 			1 => OpCodeType::ADD,
+			2 => OpCodeType::POP,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -87,6 +89,10 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::ADD => Definition {
 			name: "OpAdd",
+			operandWidths: vec![],
+		},
+		OpCodeType::POP => Definition {
+			name: "OpPop",
 			operandWidths: vec![],
 		}
 	}

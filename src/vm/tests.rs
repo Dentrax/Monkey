@@ -46,7 +46,7 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
 
 		vm.run();
 
-		if let Some(e) = vm.stack_top() {
+		if let Some(e) = vm.last_popped_stack_elem() {
 			test_expected_object(&t.expected, e);
 		}
 	}

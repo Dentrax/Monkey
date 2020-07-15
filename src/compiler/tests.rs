@@ -24,6 +24,19 @@ fn test_integer_arithmetic() {
 				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
 				make(OpCodeType::ADD, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			]
+		},
+		CompilerTestCase {
+			input: "1; 2",
+			expectedConstants: vec![
+				Object::INTEGER(1),
+				Object::INTEGER(2)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
 			]
 		},
 	];
