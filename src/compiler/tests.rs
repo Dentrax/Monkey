@@ -16,6 +16,18 @@ struct CompilerTestCase<'a> {
 fn test_integer_arithmetic() {
 	let tests = vec![
 		CompilerTestCase {
+			input: "1; 2",
+			expectedConstants: vec![
+				Object::INTEGER(1),
+				Object::INTEGER(2)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			]
+		},
+		CompilerTestCase {
 			input: "1 + 2",
 			expectedConstants: vec![
 				Object::INTEGER(1),
@@ -28,14 +40,38 @@ fn test_integer_arithmetic() {
 			]
 		},
 		CompilerTestCase {
-			input: "1; 2",
+			input: "1 - 2",
 			expectedConstants: vec![
 				Object::INTEGER(1),
 				Object::INTEGER(2)],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
-				make(OpCodeType::POP, &vec![]).unwrap(),
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::SUB, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			]
+		},
+		CompilerTestCase {
+			input: "1 * 2",
+			expectedConstants: vec![
+				Object::INTEGER(1),
+				Object::INTEGER(2)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::MUL, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			]
+		},
+		CompilerTestCase {
+			input: "2 / 1",
+			expectedConstants: vec![
+				Object::INTEGER(2),
+				Object::INTEGER(1)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::DIV, &vec![]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			]
 		},
@@ -52,18 +88,23 @@ fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
 
 		let mut compiler = Compiler::new();
 
-		compiler.compile(PROGRAM(program));
+		match compiler.compile(PROGRAM(program)) {
+			Ok(o) => {
+				let bytecode = compiler.bytecode();
 
-		let bytecode = compiler.bytecode();
+				match test_instructions(&t.expectedInstructions, &bytecode.instructions) {
+					Ok(e) => assert!(true),
+					Err(e) => panic!("Error on test_instructions: {}", e)
+				}
 
-		match test_instructions(&t.expectedInstructions, &bytecode.instructions) {
-			Ok(e) => assert!(true),
-			Err(e) => panic!("Error on test_instructions: {}", e)
-		}
-
-		match test_constants(&t.expectedConstants, &bytecode.constants) {
-			Ok(e) => assert!(true),
-			Err(e) => panic!("Error on test_constants: {}", e)
+				match test_constants(&t.expectedConstants, &bytecode.constants) {
+					Ok(e) => assert!(true),
+					Err(e) => panic!("Error on test_constants: {}", e)
+				}
+			},
+			Err(e) => {
+				panic!("Compiler error: {}", e)
+			}
 		}
 	}
 }

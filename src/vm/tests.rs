@@ -25,6 +25,42 @@ fn test_integer_arithmetic() {
 			input: "1 + 2",
 			expected: Object::INTEGER(3)
 		},
+		VMTestCase {
+			input: "1 - 2",
+			expected: Object::INTEGER(-1)
+		},
+		VMTestCase {
+			input: "4 / 2",
+			expected: Object::INTEGER(2)
+		},
+		VMTestCase {
+			input: "50 / 2 * 2 + 10 - 5",
+			expected: Object::INTEGER(55)
+		},
+		VMTestCase {
+			input: "5 * (2 + 10)",
+			expected: Object::INTEGER(60)
+		},
+		VMTestCase {
+			input: "5 + 5 + 5 + 5 - 10",
+			expected: Object::INTEGER(10)
+		},
+		VMTestCase {
+			input: "2 * 2 * 2 * 2 * 2",
+			expected: Object::INTEGER(32)
+		},
+		VMTestCase {
+			input: "5 * 2 + 10",
+			expected: Object::INTEGER(20)
+		},
+		VMTestCase {
+			input: "5 + 2 * 10",
+			expected: Object::INTEGER(25)
+		},
+		VMTestCase {
+			input: "5 * (2 + 10)",
+			expected: Object::INTEGER(60)
+		},
 	];
 
 	run_vm_tests(tests);

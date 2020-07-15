@@ -34,10 +34,10 @@ impl IInstructions for Instructions {
 	}
 
 	fn fmt_instruction(&self, def: &Definition, operands: &Vec<usize>) -> String {
-		match def.operandWidths.len() {
+		match def.operand_widths.len() {
 			0 => format!("{}", def.name),
 			1 => format!("{} {}", def.name, operands[0]),
-			_ => panic!("unexpected operandWidths len: {}", def.operandWidths.len())
+			_ => panic!("unexpected operand_widths len: {}", def.operand_widths.len())
 		}
 	}
 }
@@ -57,19 +57,25 @@ impl fmt::Display for CodeError {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum OpCodeType {
 	CONSTANT = 0,
-	ADD = 1,
-	POP = 2,
+	POP = 1,
+	ADD = 2,
+	SUB = 3,
+	MUL = 4,
+	DIV = 5,
 }
 
 impl From<u8> for OpCodeType {
 	fn from(v: u8) -> Self {
 		match v {
 			0 => OpCodeType::CONSTANT,
-			1 => OpCodeType::ADD,
-			2 => OpCodeType::POP,
+			1 => OpCodeType::POP,
+			2 => OpCodeType::ADD,
+			3 => OpCodeType::SUB,
+			4 => OpCodeType::MUL,
+			5 => OpCodeType::DIV,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -78,34 +84,46 @@ impl From<u8> for OpCodeType {
 #[derive(Debug)]
 pub struct Definition<'a> {
 	name: &'a str,
-	operandWidths: Vec<u8>,
+	operand_widths: Vec<u8>,
 }
 
 pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 	match op {
 		OpCodeType::CONSTANT => Definition {
 			name: "OpConstant",
-			operandWidths: vec![2],
-		},
-		OpCodeType::ADD => Definition {
-			name: "OpAdd",
-			operandWidths: vec![],
+			operand_widths: vec![2],
 		},
 		OpCodeType::POP => Definition {
 			name: "OpPop",
-			operandWidths: vec![],
+			operand_widths: vec![],
+		},
+		OpCodeType::ADD => Definition {
+			name: "OpAdd",
+			operand_widths: vec![],
+		},
+		OpCodeType::SUB => Definition {
+			name: "OpSub",
+			operand_widths: vec![],
+		},
+		OpCodeType::MUL => Definition {
+			name: "OpMul",
+			operand_widths: vec![],
+		},
+		OpCodeType::DIV => Definition {
+			name: "OpDiv",
+			operand_widths: vec![],
 		}
 	}
 }
 
 pub fn make(op: OpCodeType, operands: &Vec<usize>) -> Result<Vec<u8>, CodeError> {
 	let definition = lookup(op);
-	let capacity: usize = definition.operandWidths.iter().map(|w| *w as usize).sum::<usize>(); //usize
+	let capacity: usize = definition.operand_widths.iter().map(|w| *w as usize).sum::<usize>(); //usize
 
 	let mut instructions = Vec::with_capacity(1 + capacity);
 	instructions.push(op as u8);
 
-	for (operand, width) in operands.into_iter().zip(definition.operandWidths) {
+	for (operand, width) in operands.into_iter().zip(definition.operand_widths) {
 		match width {
 			2 => match instructions.write_u16::<BigEndian>(*operand as u16) {
 				Err(e) => {
@@ -123,10 +141,10 @@ pub fn make(op: OpCodeType, operands: &Vec<usize>) -> Result<Vec<u8>, CodeError>
 }
 
 pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<usize>, usize) {
-	let mut operands: Vec<usize> = Vec::with_capacity(def.operandWidths.len());
+	let mut operands: Vec<usize> = Vec::with_capacity(def.operand_widths.len());
 	let mut offset: usize = 0;
 
-	for (i, width) in def.operandWidths.iter().enumerate() {
+	for (i, width) in def.operand_widths.iter().enumerate() {
 		match width {
 			2 => {
 				let value = BigEndian::read_u16(&ins[offset..]);

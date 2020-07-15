@@ -1,5 +1,5 @@
 use crate::types::object::{Object, OBJ_NULL};
-use crate::code::code::{Instructions, OpCodeType, read_uint16};
+use crate::code::code::{Instructions, OpCodeType, read_uint16, lookup};
 use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
 
@@ -39,35 +39,51 @@ impl<'a> VM<'a> {
 		let mut ip = 0;
 
 		while ip < self.instructions.len() {
-			let op = self.instructions[ip];
+			let op_code = self.instructions[ip];
+			let op = OpCodeType::from(op_code);
 
-			match OpCodeType::from(op) {
+			match op {
 				OpCodeType::CONSTANT => {
 					let const_index = read_uint16(&self.instructions[ip + 1..]);
 					ip += 2;
 
 					self.push(self.constants[const_index].clone()); //FIXME: do not clone?
 				},
-				OpCodeType::ADD => {
-					let right = self.pop().to_owned(); //FIXME: cloning
-					let left = self.pop().to_owned();
-
-					match (right.borrow(), left.borrow()) {
-						(Object::INTEGER(r), Object::INTEGER(l)) => {
-							let res = r + l;
-							self.push(Object::INTEGER(res));
-						}
-						_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
-					}
-				},
+				OpCodeType::ADD | OpCodeType::SUB | OpCodeType::MUL | OpCodeType::DIV => {
+					self.execute_binary_operation(op);
+				}
 				OpCodeType::POP => {
 					self.pop();
 				},
-				_ => panic!("unexpected OpCodeType: {}", op)
+				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 
 			ip += 1;
 		};
+	}
+
+	fn execute_binary_operation(&mut self, op: OpCodeType) { //TODO: return err
+		let right = self.pop().to_owned(); //FIXME: cloning
+		let left = self.pop().to_owned();
+
+		match (right.borrow(), left.borrow()) {
+			(Object::INTEGER(r), Object::INTEGER(l)) => {
+				self.execute_binary_operation_integer(op, *l, *r);
+			}
+			_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
+		}
+	}
+
+	fn execute_binary_operation_integer(&mut self, op: OpCodeType, left: isize, right: isize) {
+		let result = match op {
+			OpCodeType::ADD => left + right,
+			OpCodeType::SUB => left - right,
+			OpCodeType::MUL => left * right,
+			OpCodeType::DIV => left / right,
+			_ => panic!("unknown integer operator: {:?}", op)
+		};
+
+		self.push(Object::INTEGER(result));
 	}
 
 	fn push(&mut self, o: Object) {

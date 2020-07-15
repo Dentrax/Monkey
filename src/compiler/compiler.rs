@@ -110,7 +110,16 @@ impl Compiler {
 
 				match i.operator {
 					InfixType::PLUS => {
-						let p = self.emit(OpCodeType::ADD, &vec![]);
+						self.emit(OpCodeType::ADD, &vec![]);
+					},
+					InfixType::MINUS => {
+						self.emit(OpCodeType::SUB, &vec![]);
+					},
+					InfixType::DIVISION => {
+						self.emit(OpCodeType::DIV, &vec![]);
+					},
+					InfixType::MULTIPLICATION => {
+						self.emit(OpCodeType::MUL, &vec![]);
 					},
 					_ => return Err(CompilerError::UNKNOWN_INFIX_OPERATOR(i.operator.clone()))
 				}
