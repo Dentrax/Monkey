@@ -65,6 +65,8 @@ pub enum OpCodeType {
 	SUB = 3,
 	MUL = 4,
 	DIV = 5,
+	TRUE = 6,
+	FALSE = 7,
 }
 
 impl From<u8> for OpCodeType {
@@ -76,6 +78,8 @@ impl From<u8> for OpCodeType {
 			3 => OpCodeType::SUB,
 			4 => OpCodeType::MUL,
 			5 => OpCodeType::DIV,
+			6 => OpCodeType::TRUE,
+			7 => OpCodeType::FALSE,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -111,6 +115,14 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::DIV => Definition {
 			name: "OpDiv",
+			operand_widths: vec![],
+		},
+		OpCodeType::TRUE => Definition {
+			name: "OpTrue",
+			operand_widths: vec![],
+		},
+		OpCodeType::FALSE => Definition {
+			name: "OpFalse",
 			operand_widths: vec![],
 		}
 	}

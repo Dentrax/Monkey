@@ -131,6 +131,13 @@ impl Compiler {
 						let ops = &vec![self.add_constant(integer)];
 						let p = self.emit(OpCodeType::CONSTANT, ops);
 					}
+					ast::Literal::BOOL(b) => {
+						if *b {
+							self.emit(OpCodeType::TRUE, &vec![]);
+						} else {
+							self.emit(OpCodeType::FALSE, &vec![]);
+						}
+					}
 					_ => return Err(CompilerError::UNKNOWN_EXPRESSION_LITERAL(l.clone()))
 				};
 			}

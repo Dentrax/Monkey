@@ -1,4 +1,4 @@
-use crate::types::object::{Object, OBJ_NULL};
+use crate::types::object::{Object, OBJ_NULL, OBJ_TRUE, OBJ_FALSE};
 use crate::code::code::{Instructions, OpCodeType, read_uint16, lookup};
 use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
@@ -51,6 +51,12 @@ impl<'a> VM<'a> {
 				},
 				OpCodeType::ADD | OpCodeType::SUB | OpCodeType::MUL | OpCodeType::DIV => {
 					self.execute_binary_operation(op);
+				}
+				OpCodeType::TRUE => {
+					self.push(OBJ_TRUE);
+				}
+				OpCodeType::FALSE => {
+					self.push(OBJ_FALSE);
 				}
 				OpCodeType::POP => {
 					self.pop();

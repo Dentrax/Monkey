@@ -80,6 +80,30 @@ fn test_integer_arithmetic() {
 	run_compiler_tests(tests);
 }
 
+#[test]
+fn test_expression_boolean() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "true",
+			expectedConstants: vec![],
+			expectedInstructions: vec![
+				make(OpCodeType::TRUE, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			]
+		},
+		CompilerTestCase {
+			input: "false",
+			expectedConstants: vec![],
+			expectedInstructions: vec![
+				make(OpCodeType::FALSE, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			]
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();

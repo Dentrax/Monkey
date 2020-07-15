@@ -66,6 +66,22 @@ fn test_integer_arithmetic() {
 	run_vm_tests(tests);
 }
 
+#[test]
+fn test_expression_boolean() {
+	let tests = vec![
+		VMTestCase {
+			input: "true",
+			expected: Object::BOOLEAN(true)
+		},
+		VMTestCase {
+			input: "false",
+			expected: Object::BOOLEAN(false)
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
 fn run_vm_tests(tests: Vec<VMTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();
@@ -93,6 +109,11 @@ fn test_expected_object(expected: &Object, actual: &Object) {
 		(Object::INTEGER(l), Object::INTEGER(r)) => {
 			if l != r {
 				panic!("integer object has wrong value. got: {}, want: {}", r, l)
+			}
+		},
+		(Object::BOOLEAN(l), Object::BOOLEAN(r)) => {
+			if l != r {
+				panic!("boolean object has wrong value. got: {}, want: {}", r, l)
 			}
 		},
 		_ => panic!("Unexpected comparison types. expected: {:?}, actual: {:?}", expected, actual)
