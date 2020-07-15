@@ -70,6 +70,8 @@ pub enum OpCodeType {
 	EQ = 8,
 	NEQ = 9,
 	GT = 10,
+	MINUS = 11,
+	BANG = 12,
 }
 
 impl From<u8> for OpCodeType {
@@ -86,6 +88,8 @@ impl From<u8> for OpCodeType {
 			8 => OpCodeType::EQ,
 			9 => OpCodeType::NEQ,
 			10 => OpCodeType::GT,
+			11 => OpCodeType::MINUS,
+			12 => OpCodeType::BANG,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -141,6 +145,14 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::GT => Definition {
 			name: "OpGreaterThan",
+			operand_widths: vec![],
+		},
+		OpCodeType::MINUS => Definition {
+			name: "OpMinus",
+			operand_widths: vec![],
+		},
+		OpCodeType::BANG => Definition {
+			name: "OpBang",
 			operand_widths: vec![],
 		}
 	}

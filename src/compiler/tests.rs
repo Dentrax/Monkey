@@ -75,6 +75,16 @@ fn test_integer_arithmetic() {
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
+		CompilerTestCase {
+			input: "-1",
+			expectedConstants: vec![
+				Object::INTEGER(1)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::MINUS, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
 	];
 
 	run_compiler_tests(tests);
@@ -164,6 +174,15 @@ fn test_expression_boolean() {
 				make(OpCodeType::TRUE, &vec![]).unwrap(),
 				make(OpCodeType::FALSE, &vec![]).unwrap(),
 				make(OpCodeType::NEQ, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "!true",
+			expectedConstants: vec![],
+			expectedInstructions: vec![
+				make(OpCodeType::TRUE, &vec![]).unwrap(),
+				make(OpCodeType::BANG, &vec![]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},

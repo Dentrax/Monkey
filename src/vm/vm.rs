@@ -49,21 +49,27 @@ impl<'a> VM<'a> {
 
 					self.push(self.constants[const_index].clone()); //FIXME: do not clone?
 				},
-				OpCodeType::ADD | OpCodeType::SUB | OpCodeType::MUL | OpCodeType::DIV => {
-					self.execute_binary_operation(op);
-				}
-				OpCodeType::TRUE => {
-					self.push(OBJ_TRUE);
-				}
-				OpCodeType::FALSE => {
-					self.push(OBJ_FALSE);
-				}
-				OpCodeType::EQ | OpCodeType::NEQ | OpCodeType::GT => {
-					self.execute_comparison(op);
-				}
 				OpCodeType::POP => {
 					self.pop();
 				},
+				OpCodeType::ADD | OpCodeType::SUB | OpCodeType::MUL | OpCodeType::DIV => {
+					self.execute_binary_operation(op);
+				},
+				OpCodeType::TRUE => {
+					self.push(OBJ_TRUE);
+				},
+				OpCodeType::FALSE => {
+					self.push(OBJ_FALSE);
+				},
+				OpCodeType::EQ | OpCodeType::NEQ | OpCodeType::GT => {
+					self.execute_comparison(op);
+				},
+				OpCodeType::BANG => {
+					self.execute_operator_bang();
+				},
+				OpCodeType::MINUS => {
+					self.execute_operator_minus();
+				}
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 
@@ -129,6 +135,32 @@ impl<'a> VM<'a> {
 		};
 
 		self.push(Object::BOOLEAN(result));
+	}
+
+	fn execute_operator_bang(&mut self) {
+		let operand = self.pop().to_owned();
+
+		let result = match operand {
+			Object::BOOLEAN(b) => {
+				if b {
+					self.push(OBJ_FALSE)
+				} else {
+					self.push(OBJ_TRUE)
+				}
+			},
+			_ => self.push(OBJ_FALSE)
+		};
+	}
+
+	fn execute_operator_minus(&mut self) {
+		let operand = self.pop().to_owned();
+
+		let result = match operand {
+			Object::INTEGER(i) => {
+				self.push(Object::INTEGER(-i))
+			},
+			_ => panic!("unsupported type for negation: {:?}", operand)
+		};
 	}
 
 	fn push(&mut self, o: Object) {

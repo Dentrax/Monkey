@@ -4,7 +4,7 @@ use std::error::Error;
 use crate::ast::ast;
 use std::fmt::{Display, Formatter};
 use std::fmt;
-use crate::ast::ast::{Program, Node, InfixType, Literal, Expression};
+use crate::ast::ast::{Program, Node, InfixType, PrefixType, Literal, Expression};
 
 pub struct Compiler {
 	instructions: Instructions,
@@ -156,7 +156,19 @@ impl Compiler {
 					}
 					_ => return Err(CompilerError::UNKNOWN_EXPRESSION_LITERAL(l.clone()))
 				};
-			}
+			},
+			ast::Expression::PREFIX(p) => {
+				self.compile_expression(&p.right)?;
+
+				match &p.operator {
+					PrefixType::BANG => {
+						self.emit(OpCodeType::BANG, &vec![]);
+					},
+					PrefixType::MINUS => {
+						self.emit(OpCodeType::MINUS, &vec![]);
+					}
+				}
+			},
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};
 		Ok(())
