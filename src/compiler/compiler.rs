@@ -4,11 +4,25 @@ use std::error::Error;
 use crate::ast::ast;
 use std::fmt::{Display, Formatter};
 use std::fmt;
-use crate::ast::ast::{Program, Node, InfixType, PrefixType, Literal, Expression};
+use crate::ast::ast::{Program, Node, InfixType, PrefixType, Literal, Expression, Statement};
 
 pub struct Compiler {
 	instructions: Instructions,
 	constants: Vec<Object>,
+	last_instruction: Option<EmittedInstruction>,
+	prev_instruction: Option<EmittedInstruction>,
+}
+
+#[derive(Clone)]
+struct EmittedInstruction {
+	opcode: OpCodeType,
+	position: usize
+}
+
+impl EmittedInstruction {
+	fn is_pop(&self) -> bool {
+		self.opcode == OpCodeType::POP
+	}
 }
 
 #[derive(Debug, PartialEq)]
@@ -16,7 +30,7 @@ pub enum CompilerError {
 	WRONG_CONSTANTS_TYPE { want: Object, got: Object },
 	WRONG_NUMBER_OF_CONSTANTS { want: usize, got: usize },
 	WRONG_CONSTANTS_INTEGER_EQUALITY{ want: isize, got: isize },
-	WRONG_INSTRUCTION_AT { at: usize, want: Vec<u8>, got: Vec<u8> },
+	WRONG_INSTRUCTION_AT { at: usize, want: String, got: String },
 	WRONG_INSTRUCTIONS_LENGTH { want: String, got: String },
 	UNKNOWN_INFIX_OPERATOR(InfixType),
 	UNKNOWN_EXPRESSION_LITERAL(Literal),
@@ -36,7 +50,7 @@ impl fmt::Display for CompilerError {
 				write!(f, "wrong constants equality (integer): got: {} want: {}", got, want)
 			},
 			CompilerError::WRONG_INSTRUCTION_AT { at, want, got } => {
-				write!(f, "wrong instruction: at: {} got: {:#?} want: {:#?}", at, got, want)
+				write!(f, "wrong instruction: at: {}\ngot:\n{:#?}\nwant:\n{:#?}", at, got, want)
 			},
 			CompilerError::WRONG_INSTRUCTIONS_LENGTH { want, got } => {
 				write!(f, "wrong instructions length:\ngot:\n{:#?}\nwant:\n{:#?}", got, want)
@@ -65,6 +79,8 @@ impl Compiler {
 		Compiler {
 			instructions: vec![],
 			constants: vec![],
+			last_instruction: None,
+			prev_instruction: None
 		}
 	}
 
@@ -80,6 +96,7 @@ impl Compiler {
 				self.compile_statement(&s)?;
 			}
 		}
+
 		Ok(self.bytecode())
 	}
 
@@ -96,9 +113,21 @@ impl Compiler {
 			ast::Statement::EXPRESSION(e) => {
 				self.compile_expression(e)?;
 				self.emit(OpCodeType::POP, &vec![]);
-			}
+			},
+			ast::Statement::BLOCK(b) => {
+				self.compile_statement_block(b);
+			},
 			_ => panic!("[compile::statement]: Unexpected statement: {}", stmt.to_string())
 		}
+
+		Ok(())
+	}
+
+	fn compile_statement_block(&mut self, stmt: &ast::BlockStatement) -> Result<(), CompilerError> {
+		for stmt in &stmt.statements {
+			self.compile_statement(stmt)?;
+		}
+
 		Ok(())
 	}
 
@@ -169,15 +198,67 @@ impl Compiler {
 					}
 				}
 			},
+			ast::Expression::IF(i) => {
+				self.compile_expression(&i.condition);
+
+				//Emit an `OpJumpNotTruthy` with a bogus value
+				let jump_not_truthy_pos = self.emit(OpCodeType::JMPNT, &vec![9999]);
+
+				self.compile_statement_block(&i.consequence);
+
+				if self.last_instruction.as_ref().unwrap().is_pop() {
+					self.remove_instruction_last();
+				}
+
+				self.change_operand(jump_not_truthy_pos, self.instructions.len());
+
+				if let Some(v) = &i.alternative {
+					// Emit an `OpJump` with a bogus value
+					let jump_pos = self.emit(OpCodeType::JMP, &vec![9999]);
+					self.change_operand(jump_not_truthy_pos, self.instructions.len());
+					self.compile_statement_block(&i.alternative.as_ref().unwrap());
+					if self.last_instruction.as_ref().unwrap().is_pop() {
+						self.remove_instruction_last();
+					}
+					self.change_operand(jump_pos, self.instructions.len());
+				} else {
+					self.change_operand(jump_not_truthy_pos, self.instructions.len());
+				}
+			}
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};
+
 		Ok(())
 	}
 
 	fn emit(&mut self, op: OpCodeType, operands: &Vec<usize>) -> usize {
 		let ins = make(op, operands).unwrap();
 		let pos = self.add_instruction(&ins);
+		self.set_instruction_last(op, pos);
 		return pos
+	}
+
+	fn set_instruction_last(&mut self, op: OpCodeType, pos: usize) {
+		self.prev_instruction = self.last_instruction.take();
+		self.last_instruction = Some(EmittedInstruction { opcode: op, position: pos });
+	}
+
+	fn remove_instruction_last(&mut self) {
+		let pos = self.last_instruction.as_ref().unwrap().position;
+		self.instructions.truncate(pos);
+		self.last_instruction = self.prev_instruction.clone();
+	}
+
+	fn replace_instruction(&mut self, pos: usize, new_instruction: Vec<u8>) {
+		for i in 0..new_instruction.len() {
+			self.instructions[pos + i] = new_instruction[i];
+		}
+	}
+
+	fn change_operand(&mut self, op_pos: usize, operand: usize) {
+		let op = OpCodeType::from(self.instructions[op_pos]);
+		let new_instruction = make(op, &vec![operand]);
+		self.replace_instruction(op_pos, new_instruction.unwrap());
 	}
 
 	fn add_instruction(&mut self, ins: &Vec<u8>) -> usize {

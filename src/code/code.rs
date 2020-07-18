@@ -57,7 +57,7 @@ impl fmt::Display for CodeError {
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OpCodeType {
 	CONSTANT = 0,
 	POP = 1,
@@ -72,6 +72,8 @@ pub enum OpCodeType {
 	GT = 10,
 	MINUS = 11,
 	BANG = 12,
+	JMP = 13,
+	JMPNT = 14,
 }
 
 impl From<u8> for OpCodeType {
@@ -90,6 +92,8 @@ impl From<u8> for OpCodeType {
 			10 => OpCodeType::GT,
 			11 => OpCodeType::MINUS,
 			12 => OpCodeType::BANG,
+			13 => OpCodeType::JMP,
+			14 => OpCodeType::JMPNT,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -154,6 +158,14 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		OpCodeType::BANG => Definition {
 			name: "OpBang",
 			operand_widths: vec![],
+		},
+		OpCodeType::JMP => Definition {
+			name: "OpJump",
+			operand_widths: vec![2],
+		},
+		OpCodeType::JMPNT => Definition {
+			name: "OpJumpNotTruthy",
+			operand_widths: vec![2],
 		}
 	}
 }

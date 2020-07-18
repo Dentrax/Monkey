@@ -191,6 +191,54 @@ fn test_expression_boolean() {
 	run_compiler_tests(tests);
 }
 
+#[test]
+fn test_conditionals() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "if (true) { 7 }; 7777;",
+			expectedConstants: vec![Object::INTEGER(7), Object::INTEGER(7777)],
+			expectedInstructions: vec![
+				// 0000
+				make(OpCodeType::TRUE, &vec![]).unwrap(),
+				// 0001
+				make(OpCodeType::JMPNT, &vec![7]).unwrap(),
+				// 0004
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				// 0007
+				make(OpCodeType::POP, &vec![]).unwrap(),
+				// 0008
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				// 0011
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "if (true) { 7 } else { 15 }; 7777;",
+			expectedConstants: vec![Object::INTEGER(7), Object::INTEGER(15), Object::INTEGER(7777)],
+			expectedInstructions: vec![
+				// 0000
+				make(OpCodeType::TRUE, &vec![]).unwrap(),
+				// 0001
+				make(OpCodeType::JMPNT, &vec![10]).unwrap(),
+				// 0004
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				// 0007
+				make(OpCodeType::JMP, &vec![13]).unwrap(),
+				// 0010
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				// 0013
+				make(OpCodeType::POP, &vec![]).unwrap(),
+				// 0014
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				// 0017
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();
@@ -229,7 +277,7 @@ fn test_instructions(expected: &Vec<Instructions>, actual: &Instructions) -> Res
 
 	for (i, ins) in concatted.iter().enumerate() {
 		if actual[i] != *ins {
-			return Err(CompilerError::WRONG_INSTRUCTION_AT { at: i, want: concatted, got: actual.clone() });
+			return Err(CompilerError::WRONG_INSTRUCTION_AT { at: i, want: concatted.string(), got: actual.clone().string() });
 		}
 	}
 
