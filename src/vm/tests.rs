@@ -190,6 +190,42 @@ fn test_expression_boolean() {
 	run_vm_tests(tests);
 }
 
+#[test]
+fn test_conditionals() {
+	let tests = vec![
+		VMTestCase {
+			input: "if (true) { 10 }",
+			expected: Object::INTEGER(10)
+		},
+		VMTestCase {
+			input: "if (true) { 10 } else { 20 }",
+			expected: Object::INTEGER(10)
+		},
+		VMTestCase {
+			input: "if (false) { 10 } else { 20 }",
+			expected: Object::INTEGER(20)
+		},
+		VMTestCase {
+			input: "if (1) { 10 }",
+			expected: Object::INTEGER(10)
+		},
+		VMTestCase {
+			input: "if (1 < 2) { 10 }",
+			expected: Object::INTEGER(10)
+		},
+		VMTestCase {
+			input: "if (1 < 2) { 10 } else { 20 }",
+			expected: Object::INTEGER(10)
+		},
+		VMTestCase {
+			input: "if (1 > 2) { 10 } else { 20 }",
+			expected: Object::INTEGER(20)
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
 fn run_vm_tests(tests: Vec<VMTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();

@@ -109,6 +109,13 @@ impl Object {
 			Object::NULL => STR_NULL,
 		}
 	}
+
+	pub fn is_truthy(&self) -> bool {
+		match self {
+			Object::BOOLEAN(b) => *b,
+			_ => true
+		}
+	}
 }
 
 impl fmt::Display for Object {

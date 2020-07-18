@@ -69,7 +69,21 @@ impl<'a> VM<'a> {
 				},
 				OpCodeType::MINUS => {
 					self.execute_operator_minus();
-				}
+				},
+				OpCodeType::JMP => {
+					let pos = read_uint16(&self.instructions[ip + 1..]);
+					ip = pos - 1;
+				},
+				OpCodeType::JMPNT => {
+					let pos = read_uint16(&self.instructions[ip + 1..]);
+					ip += 2; //skip over the two bytes of the operand in the next cycle
+
+					let condition = self.pop();
+
+					if !condition.is_truthy() {
+						ip = pos - 1;
+					}
+				},
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 
