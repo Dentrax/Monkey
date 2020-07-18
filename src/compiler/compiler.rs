@@ -1,4 +1,4 @@
-use crate::types::object::Object;
+use crate::types::object::{Object, OBJ_NULL};
 use crate::code::code::{Instructions, OpCodeType, make};
 use std::error::Error;
 use crate::ast::ast;
@@ -209,21 +209,21 @@ impl Compiler {
 				if self.last_instruction.as_ref().unwrap().is_pop() {
 					self.remove_instruction_last();
 				}
+				//Emit an `OpJump` with a bogus value
+				let jump_pos = self.emit(OpCodeType::JMP, &vec![9999]);
 
 				self.change_operand(jump_not_truthy_pos, self.instructions.len());
 
 				if let Some(v) = &i.alternative {
-					// Emit an `OpJump` with a bogus value
-					let jump_pos = self.emit(OpCodeType::JMP, &vec![9999]);
-					self.change_operand(jump_not_truthy_pos, self.instructions.len());
 					self.compile_statement_block(&i.alternative.as_ref().unwrap());
 					if self.last_instruction.as_ref().unwrap().is_pop() {
 						self.remove_instruction_last();
 					}
-					self.change_operand(jump_pos, self.instructions.len());
 				} else {
-					self.change_operand(jump_not_truthy_pos, self.instructions.len());
+					self.emit(OpCodeType::NULL, &vec![]);
 				}
+
+				self.change_operand(jump_pos, self.instructions.len());
 			}
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};

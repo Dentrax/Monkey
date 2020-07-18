@@ -74,6 +74,7 @@ pub enum OpCodeType {
 	BANG = 12,
 	JMP = 13,
 	JMPNT = 14,
+	NULL = 15,
 }
 
 impl From<u8> for OpCodeType {
@@ -94,6 +95,7 @@ impl From<u8> for OpCodeType {
 			12 => OpCodeType::BANG,
 			13 => OpCodeType::JMP,
 			14 => OpCodeType::JMPNT,
+			15 => OpCodeType::NULL,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -166,6 +168,10 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		OpCodeType::JMPNT => Definition {
 			name: "OpJumpNotTruthy",
 			operand_widths: vec![2],
+		},
+		OpCodeType::NULL => Definition {
+			name: "OpNull",
+			operand_widths: vec![],
 		}
 	}
 }

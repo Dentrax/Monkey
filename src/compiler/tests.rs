@@ -201,14 +201,18 @@ fn test_conditionals() {
 				// 0000
 				make(OpCodeType::TRUE, &vec![]).unwrap(),
 				// 0001
-				make(OpCodeType::JMPNT, &vec![7]).unwrap(),
+				make(OpCodeType::JMPNT, &vec![10]).unwrap(),
 				// 0004
 				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
 				// 0007
-				make(OpCodeType::POP, &vec![]).unwrap(),
-				// 0008
-				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::JMP, &vec![11]).unwrap(),
+				// 0010
+				make(OpCodeType::NULL, &vec![]).unwrap(),
 				// 0011
+				make(OpCodeType::POP, &vec![]).unwrap(),
+				// 0012
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				// 0015
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},

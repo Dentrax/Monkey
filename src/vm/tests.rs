@@ -1,4 +1,4 @@
-use crate::types::object::Object;
+use crate::types::object::{Object, OBJ_NULL};
 use crate::parser::parser::Parser;
 use crate::lexer::lexer::Lexer;
 use crate::compiler::compiler::Compiler;
@@ -185,6 +185,10 @@ fn test_expression_boolean() {
 			input: "!!7",
 			expected: Object::BOOLEAN(true)
 		},
+		VMTestCase {
+			input: "!(if (false) { 5; })",
+			expected: Object::BOOLEAN(true)
+		},
 	];
 
 	run_vm_tests(tests);
@@ -221,6 +225,18 @@ fn test_conditionals() {
 			input: "if (1 > 2) { 10 } else { 20 }",
 			expected: Object::INTEGER(20)
 		},
+		VMTestCase {
+			input: "if (1 > 2) { 10 }",
+			expected: OBJ_NULL
+		},
+		VMTestCase {
+			input: "if (false) { 10 }",
+			expected: OBJ_NULL
+		},
+		VMTestCase {
+			input: "if ((if (false) { 10 })) { 10 } else { 20 }",
+			expected: Object::INTEGER(20)
+		},
 	];
 
 	run_vm_tests(tests);
@@ -243,7 +259,7 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
 				vm.run();
 
 				if let Some(e) = vm.last_popped_stack_elem() {
-					test_expected_object(&t.expected, e);
+					test_expected_object(&t.input, &t.expected, e);
 				}
 			},
 			Err(e) => {
@@ -253,18 +269,23 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
 	}
 }
 
-fn test_expected_object(expected: &Object, actual: &Object) {
+fn test_expected_object(input: &str, expected: &Object, actual: &Object) {
 	match (&expected, &actual) {
 		(Object::INTEGER(l), Object::INTEGER(r)) => {
 			if l != r {
-				panic!("integer object has wrong value. got: {}, want: {}", r, l)
+				panic!("integer object has wrong value for `{}`. got: {}, want: {}", input, r, l)
 			}
 		},
 		(Object::BOOLEAN(l), Object::BOOLEAN(r)) => {
 			if l != r {
-				panic!("boolean object has wrong value. got: {}, want: {}", r, l)
+				panic!("boolean object has wrong value for `{}`. got: {}, want: {}", input, r, l)
 			}
 		},
-		_ => panic!("Unexpected comparison types. expected: {:?}, actual: {:?}", expected, actual)
+		(Object::NULL, a) => {
+			if !a.is_null() {
+				panic!("null object is not null value for `{}`. got: {}, want: NULL", input, a.to_string())
+			}
+		}
+		_ => panic!("Unexpected comparison types for `{}`. expected: {:?}, actual: {:?}", input, expected, actual)
 	}
 }

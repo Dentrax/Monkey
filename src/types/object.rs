@@ -113,6 +113,7 @@ impl Object {
 	pub fn is_truthy(&self) -> bool {
 		match self {
 			Object::BOOLEAN(b) => *b,
+			Object::NULL => false,
 			_ => true
 		}
 	}

@@ -84,6 +84,9 @@ impl<'a> VM<'a> {
 						ip = pos - 1;
 					}
 				},
+				OpCodeType::NULL => {
+					self.push(OBJ_NULL);
+				},
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 
@@ -162,6 +165,9 @@ impl<'a> VM<'a> {
 					self.push(OBJ_TRUE)
 				}
 			},
+			Object::NULL => {
+				self.push(OBJ_TRUE)
+			}
 			_ => self.push(OBJ_FALSE)
 		};
 	}
