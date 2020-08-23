@@ -75,6 +75,8 @@ pub enum OpCodeType {
 	JMP = 13,
 	JMPNT = 14,
 	NULL = 15,
+	GG = 16,
+	GS = 17,
 }
 
 impl From<u8> for OpCodeType {
@@ -96,6 +98,8 @@ impl From<u8> for OpCodeType {
 			13 => OpCodeType::JMP,
 			14 => OpCodeType::JMPNT,
 			15 => OpCodeType::NULL,
+			16 => OpCodeType::GG,
+			17 => OpCodeType::GS,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -172,6 +176,14 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		OpCodeType::NULL => Definition {
 			name: "OpNull",
 			operand_widths: vec![],
+		},
+		OpCodeType::GG => Definition {
+			name: "OpGlobalGet",
+			operand_widths: vec![2],
+		},
+		OpCodeType::GS => Definition {
+			name: "OpGlobalSet",
+			operand_widths: vec![2],
 		}
 	}
 }

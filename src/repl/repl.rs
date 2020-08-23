@@ -9,6 +9,8 @@ use std::process;
 use std::io::prelude::*;
 use crate::compiler::compiler::Compiler;
 use crate::vm::vm::VM;
+use crate::compiler::symbol_table::SymbolTable;
+use crate::types::builtins::Builtin::REST;
 
 const PROMPT: &str = ">>> ";
 
@@ -16,7 +18,10 @@ pub fn start() {
     let mut stdout = io::stdout();
 
     let mut input = String::new();
-	let mut evaluator = Evaluator::new();
+	let mut constants = vec![];
+	let mut globals = VM::new_globals();
+	//let mut evaluator = Evaluator::new();
+	let mut symbol_table = SymbolTable::new();
 
 	loop {
         if write!(&mut stdout, "{}", PROMPT).is_err() { 
@@ -41,18 +46,23 @@ pub fn start() {
 				}
 
 				//VM
-				let mut comp = Compiler::new();
+				let mut comp = Compiler::new_with_state(symbol_table, constants);
+
 				match comp.compile(Node::PROGRAM(program)) {
 					Ok(b) => {
-						let mut machine = VM::new(&b);
+						let mut machine = VM::new_with_global_store(&b, globals);
 						machine.run();
 						println!("{}", machine.last_popped_stack_elem().unwrap());
+						globals = machine.globals;
 					}
 					Err(e) => {
 						println!("Compilation failed: {}", e);
-						continue;
+						//continue;
 					}
 				}
+
+				constants = comp.constants;
+				symbol_table = comp.symbol_table;
 
 				//EVALUATOR
 				// match evaluator.eval(Node::PROGRAM(program)) {

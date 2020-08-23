@@ -4,13 +4,15 @@ use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
 
 const STACK_SIZE: usize = 2048;
+const GLOBAL_SIZE: usize = 65536;
 
 pub struct VM<'a> {
 	constants: &'a Vec<Object>,
 	instructions: &'a Instructions,
+	pub globals: Vec<Object>,
 
 	stack: Vec<Object>,
-	sp: usize
+	sp: usize,
 }
 
 impl<'a> VM<'a> {
@@ -21,20 +23,34 @@ impl<'a> VM<'a> {
 		VM {
 			constants: bytecode.constants,
 			instructions: bytecode.instructions,
+			globals: VM::new_globals(),
 
 			stack, //TODO: resize with null obj
-			sp: 0
+			sp: 0,
 		}
+	}
+
+	pub fn new_with_global_store(bytecode: &'a Bytecode, globals: Vec<Object>) -> VM<'a> {
+		let mut vm = VM::new(bytecode);
+		vm.globals = globals;
+		return vm;
+	}
+
+	pub fn new_globals() -> Vec<Object> {
+		let mut globals = Vec::with_capacity(GLOBAL_SIZE);
+		globals.resize(GLOBAL_SIZE, OBJ_NULL);
+		return globals;
 	}
 
 	pub fn stack_top(&self) -> Option<&Object> {
 		if self.sp == 0 {
-			return None
+			return None;
 		}
 
 		self.stack.get(self.sp - 1)
 	}
 
+	//FIXME: remove clone()s
 	pub fn run(&mut self) {
 		let mut ip = 0;
 
@@ -47,33 +63,33 @@ impl<'a> VM<'a> {
 					let const_index = read_uint16(&self.instructions[ip + 1..]);
 					ip += 2;
 
-					self.push(self.constants[const_index].clone()); //FIXME: do not clone?
-				},
+					self.push(self.constants[const_index].clone());
+				}
 				OpCodeType::POP => {
 					self.pop();
-				},
+				}
 				OpCodeType::ADD | OpCodeType::SUB | OpCodeType::MUL | OpCodeType::DIV => {
 					self.execute_binary_operation(op);
-				},
+				}
 				OpCodeType::TRUE => {
 					self.push(OBJ_TRUE);
-				},
+				}
 				OpCodeType::FALSE => {
 					self.push(OBJ_FALSE);
-				},
+				}
 				OpCodeType::EQ | OpCodeType::NEQ | OpCodeType::GT => {
 					self.execute_comparison(op);
-				},
+				}
 				OpCodeType::BANG => {
 					self.execute_operator_bang();
-				},
+				}
 				OpCodeType::MINUS => {
 					self.execute_operator_minus();
-				},
+				}
 				OpCodeType::JMP => {
 					let pos = read_uint16(&self.instructions[ip + 1..]);
 					ip = pos - 1;
-				},
+				}
 				OpCodeType::JMPNT => {
 					let pos = read_uint16(&self.instructions[ip + 1..]);
 					ip += 2; //skip over the two bytes of the operand in the next cycle
@@ -83,10 +99,22 @@ impl<'a> VM<'a> {
 					if !condition.is_truthy() {
 						ip = pos - 1;
 					}
-				},
+				}
+				OpCodeType::GS => {
+					let global_index = read_uint16(&self.instructions[ip + 1..]);
+					ip += 2;
+
+					self.globals[global_index] = self.pop().clone();
+				}
+				OpCodeType::GG => {
+					let global_index = read_uint16(&self.instructions[ip + 1..]);
+					ip += 2;
+
+					self.push(self.globals[global_index].clone());
+				}
 				OpCodeType::NULL => {
 					self.push(OBJ_NULL);
-				},
+				}
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 
@@ -125,10 +153,10 @@ impl<'a> VM<'a> {
 		match (right.borrow(), left.borrow()) {
 			(Object::INTEGER(r), Object::INTEGER(l)) => {
 				self.execute_comparison_integer(op, *l, *r);
-			},
+			}
 			(Object::BOOLEAN(r), Object::BOOLEAN(l)) => {
 				self.execute_comparison_boolean(op, *l, *r);
-			},
+			}
 			_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
 		}
 	}
@@ -164,7 +192,7 @@ impl<'a> VM<'a> {
 				} else {
 					self.push(OBJ_TRUE)
 				}
-			},
+			}
 			Object::NULL => {
 				self.push(OBJ_TRUE)
 			}
@@ -178,7 +206,7 @@ impl<'a> VM<'a> {
 		let result = match operand {
 			Object::INTEGER(i) => {
 				self.push(Object::INTEGER(-i))
-			},
+			}
 			_ => panic!("unsupported type for negation: {:?}", operand)
 		};
 	}

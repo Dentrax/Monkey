@@ -5,12 +5,50 @@ use crate::lexer::lexer::Lexer;
 use crate::compiler::compiler::{Compiler, CompilerError};
 use std::fmt::Error;
 use crate::ast::ast::Node::PROGRAM;
+use std::collections::HashMap;
+use crate::compiler::symbol_table::{Symbol, SymbolTable, SymbolScope};
 
 struct CompilerTestCase<'a> {
 	input: &'a str,
 	expectedConstants: Vec<Object>,
 	expectedInstructions: Vec<Instructions>,
 }
+
+// SYMBOL-TABLE TESTS
+
+#[test]
+fn test_symbol_table_define() {
+	let mut expected: HashMap<String, Symbol> = HashMap::new();
+	expected.insert("a".to_string(), Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0, }, );
+	expected.insert("b".to_string(), Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1, }, );
+
+	let mut global = SymbolTable::new();
+
+	let a = global.define("a");
+	assert_eq!(&a, expected.get("a").unwrap());
+
+	let b = global.define("b");
+	assert_eq!(&b, expected.get("b").unwrap());
+}
+
+#[test]
+fn test_symbol_table_resolve() {
+	let mut global = SymbolTable::new();
+	global.define("a");
+	global.define("b");
+
+	let mut expected: HashMap<String, Symbol> = HashMap::new();
+	expected.insert("a".to_string(), Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0, }, );
+	expected.insert("b".to_string(), Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1, }, );
+
+	for (s, sym) in expected {
+		let result = global.resolve(&*sym.name);
+
+		assert_eq!(result.unwrap(), &sym);
+	}
+}
+
+// COMPILER TESTS
 
 #[test]
 fn test_integer_arithmetic() {
@@ -243,6 +281,46 @@ fn test_conditionals() {
 	run_compiler_tests(tests);
 }
 
+#[test]
+fn test_global_let_statements() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "let one = 1; let two = 2;",
+			expectedConstants: vec![Object::INTEGER(1), Object::INTEGER(2)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::GS, &vec![1]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "let one = 1; one;",
+			expectedConstants: vec![Object::INTEGER(1)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::GG, &vec![0]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "let one = 1; let two = one; two",
+			expectedConstants: vec![Object::INTEGER(1)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::GG, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![1]).unwrap(),
+				make(OpCodeType::GG, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();
@@ -264,7 +342,7 @@ fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
 					Ok(e) => assert!(true),
 					Err(e) => panic!("Error on test_constants: {}", e)
 				}
-			},
+			}
 			Err(e) => {
 				panic!("Compiler error: {}", e)
 			}

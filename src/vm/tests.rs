@@ -242,6 +242,26 @@ fn test_conditionals() {
 	run_vm_tests(tests);
 }
 
+#[test]
+fn test_global_let_statements() {
+	let tests = vec![
+		VMTestCase {
+			input: "let one = 1; one",
+			expected: Object::INTEGER(1)
+		},
+		VMTestCase {
+			input: "let one = 1; let two = 2; one + two",
+			expected: Object::INTEGER(3)
+		},
+		VMTestCase {
+			input: "let one = 1; let two = one + one; one + two",
+			expected: Object::INTEGER(3)
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
 fn run_vm_tests(tests: Vec<VMTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();

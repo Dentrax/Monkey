@@ -5,12 +5,14 @@ use crate::ast::ast;
 use std::fmt::{Display, Formatter};
 use std::fmt;
 use crate::ast::ast::{Program, Node, InfixType, PrefixType, Literal, Expression, Statement};
+use crate::compiler::symbol_table::{SymbolTable, Symbol};
 
 pub struct Compiler {
 	instructions: Instructions,
-	constants: Vec<Object>,
+	pub constants: Vec<Object>,
 	last_instruction: Option<EmittedInstruction>,
 	prev_instruction: Option<EmittedInstruction>,
+	pub symbol_table: SymbolTable,
 }
 
 #[derive(Clone)]
@@ -35,6 +37,7 @@ pub enum CompilerError {
 	UNKNOWN_INFIX_OPERATOR(InfixType),
 	UNKNOWN_EXPRESSION_LITERAL(Literal),
 	UNKNOWN_EXPRESSION(Expression),
+	UNDEFINED_SYMBOL(String),
 }
 
 impl fmt::Display for CompilerError {
@@ -64,6 +67,9 @@ impl fmt::Display for CompilerError {
 			CompilerError::UNKNOWN_EXPRESSION(e) => {
 				write!(f, "unknown expression: {}", e.to_string())
 			},
+			CompilerError::UNDEFINED_SYMBOL(s) => {
+				write!(f, "undefined symbol: {}", s)
+			}
 		}
 	}
 }
@@ -80,7 +86,18 @@ impl Compiler {
 			instructions: vec![],
 			constants: vec![],
 			last_instruction: None,
-			prev_instruction: None
+			prev_instruction: None,
+			symbol_table: SymbolTable::new()
+		}
+	}
+
+	pub fn new_with_state(symbol_table: SymbolTable, constants: Vec<Object>) -> Self {
+		Compiler {
+			instructions: vec![],
+			constants,
+			last_instruction: None,
+			prev_instruction: None,
+			symbol_table
 		}
 	}
 
@@ -116,6 +133,12 @@ impl Compiler {
 			},
 			ast::Statement::BLOCK(b) => {
 				self.compile_statement_block(b);
+			},
+			ast::Statement::LET(l) => {
+				self.compile_expression(&l.value);
+
+				let symbol = self.symbol_table.define(&l.name);
+				self.emit(OpCodeType::GS, &vec![symbol.index]);
 			},
 			_ => panic!("[compile::statement]: Unexpected statement: {}", stmt.to_string())
 		}
@@ -224,7 +247,17 @@ impl Compiler {
 				}
 
 				self.change_operand(jump_pos, self.instructions.len());
-			}
+			},
+			ast::Expression::IDENT(i) => {
+				match self.symbol_table.resolve(i) {
+					Some(symb) => {
+						self.emit(OpCodeType::GG, &vec![symb.index]);
+					}
+					_ => {
+						return Err(CompilerError::UNDEFINED_SYMBOL(i.to_string()));
+					}
+				}
+			},
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};
 
