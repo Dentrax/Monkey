@@ -283,6 +283,12 @@ impl Compiler {
 				}
 				self.emit(OpCodeType::HASH, &vec![keys.len() * 2]);
 			}
+			ast::Expression::INDEX(id) => {
+				self.compile_expression(&id.left)?;
+				self.compile_expression(&id.index)?;
+
+				self.emit(OpCodeType::ID, &vec![]);
+			}
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};
 

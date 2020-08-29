@@ -228,6 +228,54 @@ fn test_expression_string() {
 }
 
 #[test]
+fn test_expression_index() {
+	let tests = vec![
+		VMTestCase {
+			input: "[1, 2, 3][1]",
+			expected: Object::INTEGER(2),
+		},
+		VMTestCase {
+			input: "[1, 2, 3][0 + 2]",
+			expected: Object::INTEGER(3),
+		},
+		VMTestCase {
+			input: "[[1, 1, 1]][0][0]",
+			expected: Object::INTEGER(1),
+		},
+		VMTestCase {
+			input: "[][0]",
+			expected: Object::NULL,
+		},
+		VMTestCase {
+			input: "[1, 2, 3][99]",
+			expected: Object::NULL,
+		},
+		VMTestCase {
+			input: "[1][-1]",
+			expected: Object::NULL,
+		},
+		VMTestCase {
+			input: "{1: 1, 2: 2}[1]",
+			expected: Object::INTEGER(1),
+		},
+		VMTestCase {
+			input: "{1: 1, 2: 2}[2]",
+			expected: Object::INTEGER(2),
+		},
+		VMTestCase {
+			input: "{1: 1}[0]",
+			expected: Object::NULL,
+		},
+		VMTestCase {
+			input: "{}[0]",
+			expected: Object::NULL,
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
 fn test_literal_array() {
 	let tests = vec![
 		VMTestCase {

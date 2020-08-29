@@ -256,6 +256,43 @@ fn test_expression_string() {
 }
 
 #[test]
+fn test_expression_index() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "[1, 2, 3][1 + 1]",
+			expectedConstants: vec![Object::INTEGER(1), Object::INTEGER(2), Object::INTEGER(3), Object::INTEGER(1), Object::INTEGER(1)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::ARR, &vec![3]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![3]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![4]).unwrap(),
+				make(OpCodeType::ADD, &vec![]).unwrap(),
+				make(OpCodeType::ID, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "{1: 2}[2 - 1]",
+			expectedConstants: vec![Object::INTEGER(1), Object::INTEGER(2), Object::INTEGER(2), Object::INTEGER(1)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::HASH, &vec![2]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![3]).unwrap(),
+				make(OpCodeType::SUB, &vec![]).unwrap(),
+				make(OpCodeType::ID, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
 fn test_literal_array() {
 	let tests = vec![
 		CompilerTestCase {

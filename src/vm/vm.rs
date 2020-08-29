@@ -133,6 +133,12 @@ impl<'a> VM<'a> {
 
 					self.push(hash);
 				}
+				OpCodeType::ID => {
+					let index = self.pop().to_owned();
+					let left = self.pop().to_owned();
+
+					self.execute_expression_index(left, index)
+				}
 				OpCodeType::NULL => {
 					self.push(OBJ_NULL);
 				}
@@ -244,6 +250,39 @@ impl<'a> VM<'a> {
 			}
 			_ => panic!("unsupported type for negation: {:?}", operand)
 		};
+	}
+
+	fn execute_expression_index(&mut self, left: Object, index: Object) {
+		match (left.borrow(), index.borrow()) {
+			(Object::ARRAY(arr), Object::INTEGER(i)) => {
+				self.execute_expression_index_array(arr, *i)
+			},
+			(Object::HASH(hash), _) => {
+				self.execute_expression_index_hash(hash, index);
+			},
+			_ => panic!("unsupported type for index: {:#?} {:#?}", left.clone(), index.clone())
+		}
+	}
+
+	fn execute_expression_index_array(&mut self, array: &Array, index: isize) {
+		if index < 0 || index > array.elements.len() as isize {
+			self.push(OBJ_NULL);
+			return
+		}
+
+		match array.elements.get(index as usize) {
+			Some(e) => self.push(e.clone()),
+			None => self.push(OBJ_NULL),
+		}
+	}
+
+	fn execute_expression_index_hash(&mut self, hash: &Hash, index: Object) {
+		let key = Hashable::lookup(index);
+
+		match hash.pairs.get(&key) {
+			Some(e) => self.push(e.clone()),
+			None => self.push(OBJ_NULL),
+		}
 	}
 
 	fn build_array(&self, index_start: usize, index_end: usize) -> Object {
