@@ -195,6 +195,26 @@ fn test_expression_boolean() {
 }
 
 #[test]
+fn test_expression_string() {
+	let tests = vec![
+		VMTestCase {
+			input: "\"string\"",
+			expected: Object::STRING(String::from("string"))
+		},
+		VMTestCase {
+			input: "\"str\" + \"ing\"",
+			expected: Object::STRING(String::from("string"))
+		},
+		VMTestCase {
+			input: "\"str\" + \"ing\" + \"s\"",
+			expected: Object::STRING(String::from("strings"))
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
 fn test_conditionals() {
 	let tests = vec![
 		VMTestCase {
@@ -299,6 +319,11 @@ fn test_expected_object(input: &str, expected: &Object, actual: &Object) {
 		(Object::BOOLEAN(l), Object::BOOLEAN(r)) => {
 			if l != r {
 				panic!("boolean object has wrong value for `{}`. got: {}, want: {}", input, r, l)
+			}
+		},
+		(Object::STRING(l), Object::STRING(r)) => {
+			if l != r {
+				panic!("string object has wrong value for `{}`. got: {}, want: {}", input, r, l)
 			}
 		},
 		(Object::NULL, a) => {

@@ -230,6 +230,32 @@ fn test_expression_boolean() {
 }
 
 #[test]
+fn test_expression_string() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "\"string\"",
+			expectedConstants: vec![Object::STRING(String::from("string"))],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "\"str\" + \"ing\"",
+			expectedConstants: vec![Object::STRING(String::from("str")), Object::STRING(String::from("ing"))],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::ADD, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
 fn test_conditionals() {
 	let tests = vec![
 		CompilerTestCase {
@@ -388,6 +414,11 @@ fn test_constants(expected: &Vec<Object>, actual: &Vec<Object>) -> Result<(), Co
 			(Object::INTEGER(l), Object::INTEGER(r)) => {
 				if l != r {
 					return Err(CompilerError::WRONG_CONSTANTS_INTEGER_EQUALITY { want: *l, got: *r });
+				}
+			},
+			(Object::STRING(l), Object::STRING(r)) => {
+				if l != r {
+					return Err(CompilerError::WRONG_CONSTANTS_STRING_EQUALITY { want: l.clone(), got: r.clone() });
 				}
 			}
 			_ => {

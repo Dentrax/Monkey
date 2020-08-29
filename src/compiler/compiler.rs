@@ -32,6 +32,7 @@ pub enum CompilerError {
 	WRONG_CONSTANTS_TYPE { want: Object, got: Object },
 	WRONG_NUMBER_OF_CONSTANTS { want: usize, got: usize },
 	WRONG_CONSTANTS_INTEGER_EQUALITY{ want: isize, got: isize },
+	WRONG_CONSTANTS_STRING_EQUALITY{ want: String, got: String },
 	WRONG_INSTRUCTION_AT { at: usize, want: String, got: String },
 	WRONG_INSTRUCTIONS_LENGTH { want: String, got: String },
 	UNKNOWN_INFIX_OPERATOR(InfixType),
@@ -51,6 +52,9 @@ impl fmt::Display for CompilerError {
 			},
 			CompilerError::WRONG_CONSTANTS_INTEGER_EQUALITY { want, got } => {
 				write!(f, "wrong constants equality (integer): got: {} want: {}", got, want)
+			},
+			CompilerError::WRONG_CONSTANTS_STRING_EQUALITY { want, got } => {
+				write!(f, "wrong constants equality (string): got: {} want: {}", got, want)
 			},
 			CompilerError::WRONG_INSTRUCTION_AT { at, want, got } => {
 				write!(f, "wrong instruction: at: {}\ngot:\n{:#?}\nwant:\n{:#?}", at, got, want)
@@ -198,14 +202,19 @@ impl Compiler {
 						let integer = Object::INTEGER(*i);
 						let ops = &vec![self.add_constant(integer)];
 						let p = self.emit(OpCodeType::CONSTANT, ops);
-					}
+					},
 					ast::Literal::BOOL(b) => {
 						if *b {
 							self.emit(OpCodeType::TRUE, &vec![]);
 						} else {
 							self.emit(OpCodeType::FALSE, &vec![]);
 						}
-					}
+					},
+					ast::Literal::STRING(s) => {
+						let str = Object::STRING(s.to_string());
+						let ops = &vec![self.add_constant(str)];
+						self.emit(OpCodeType::CONSTANT, ops);
+					},
 					_ => return Err(CompilerError::UNKNOWN_EXPRESSION_LITERAL(l.clone()))
 				};
 			},

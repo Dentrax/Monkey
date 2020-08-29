@@ -129,6 +129,9 @@ impl<'a> VM<'a> {
 		match (right.borrow(), left.borrow()) {
 			(Object::INTEGER(r), Object::INTEGER(l)) => {
 				self.execute_binary_operation_integer(op, *l, *r);
+			},
+			(Object::STRING(r), Object::STRING(l)) => {
+				self.execute_binary_operation_string(op, l.to_string(), r.to_string());
 			}
 			_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
 		}
@@ -144,6 +147,17 @@ impl<'a> VM<'a> {
 		};
 
 		self.push(Object::INTEGER(result));
+	}
+
+	fn execute_binary_operation_string(&mut self, op: OpCodeType, left: String, right: String) {
+		if op != OpCodeType::ADD {
+			panic!("unknown string operator: {:?}", op)
+		}
+
+		let mut result = left.clone();
+		result.push_str(&right);
+
+		self.push(Object::STRING(result));
 	}
 
 	fn execute_comparison(&mut self, op: OpCodeType) { //TODO: return err
