@@ -2,6 +2,8 @@
 
 use std::{fmt};
 use std::fmt::{Formatter};
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 pub enum Node {
 	PROGRAM(Program),
@@ -9,7 +11,7 @@ pub enum Node {
 	EXPRESSION(Expression),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Literal {
 	INT(isize),
 	STRING(String),
@@ -26,7 +28,7 @@ impl fmt::Display for Literal {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArrayLiteral {
 	pub elements: Vec<Expression>
 }
@@ -38,9 +40,10 @@ impl fmt::Display for ArrayLiteral {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HashLiteral {
-	pub pairs: Vec<(Expression, Expression)>
+	//pub pairs: Vec<(Expression, Expression)>
+	pub pairs: HashMap<Expression, Expression>
 }
 
 impl fmt::Display for HashLiteral {
@@ -50,8 +53,13 @@ impl fmt::Display for HashLiteral {
 	}
 }
 
+impl Hash for HashLiteral {
+	fn hash<H: Hasher>(&self, _state: &mut H) {
+		panic!("non-implemented");
+	}
+}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IndexExpression {
 	pub left: Box<Expression>,
 	pub index: Box<Expression>,
@@ -64,7 +72,7 @@ impl fmt::Display for IndexExpression {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expression {
 	IDENT(String),
 	LITERAL(Literal),
@@ -98,7 +106,7 @@ impl fmt::Display for Expression {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PrefixType {
 	BANG,
 	MINUS,
@@ -113,7 +121,7 @@ impl fmt::Display for PrefixType {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PrefixExpression {
 	pub operator: PrefixType,
 	pub right: Box<Expression>,
@@ -125,7 +133,7 @@ impl fmt::Display for PrefixExpression {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InfixType {
 	PLUS,
 	MINUS,
@@ -153,7 +161,7 @@ impl fmt::Display for InfixType {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct InfixExpression {
 	pub left: Box<Expression>,
 	pub operator: InfixType,
@@ -166,7 +174,7 @@ impl fmt::Display for InfixExpression {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IfExpression {
 	pub condition: Box<Expression>,
 	pub consequence: BlockStatement,
@@ -183,7 +191,7 @@ impl fmt::Display for IfExpression {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FunctionLiteral {
 	pub parameters: Vec<String>,
 	pub body: BlockStatement,
@@ -195,7 +203,7 @@ impl fmt::Display for FunctionLiteral {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CallExpression {
 	pub function: Box<Expression>,
 	pub arguments: Vec<Expression>,
@@ -211,7 +219,7 @@ impl fmt::Display for CallExpression {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LetStatement {
 	pub name: String,
 	pub value: Expression,
@@ -223,7 +231,7 @@ impl fmt::Display for LetStatement {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReturnStatement {
 	pub value: Expression,
 }
@@ -234,7 +242,7 @@ impl fmt::Display for ReturnStatement {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BlockStatement {
 	pub statements: Vec<Statement>,
 }
@@ -248,7 +256,7 @@ impl fmt::Display for BlockStatement {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Statement {
 	INCOMPLETE,
 

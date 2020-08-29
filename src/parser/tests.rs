@@ -2,6 +2,14 @@ use crate::ast::ast::*;
 use crate::lexer::lexer::*;
 use crate::parser::parser::*;
 
+macro_rules! hashmap {
+    ($( $key: expr => $val: expr ),*) => {{
+         let mut map = ::std::collections::HashMap::new();
+         $( map.insert($key, $val); )*
+         map
+    }}
+}
+
 #[test]
 fn test_ast_operator_precedence_string() {
 	struct Test<'a> {
@@ -543,40 +551,40 @@ fn test_parse_statement_expression_map() {
 	let tests = vec![
 		Test {
 			input: "{}",
-			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: vec![]})),
+			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: hashmap![]})),
 		},
 		Test {
 			input: r#"{"one": 1, "two": 2, "ten": 10}"#,
-			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: vec![
-				(Expression::LITERAL(Literal::STRING(String::from("one"))), Expression::LITERAL(Literal::INT(1))),
-				(Expression::LITERAL(Literal::STRING(String::from("two"))), Expression::LITERAL(Literal::INT(2))),
-				(Expression::LITERAL(Literal::STRING(String::from("ten"))), Expression::LITERAL(Literal::INT(10)))
+			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: hashmap![
+				Expression::LITERAL(Literal::STRING(String::from("one"))) => Expression::LITERAL(Literal::INT(1)),
+				Expression::LITERAL(Literal::STRING(String::from("two"))) => Expression::LITERAL(Literal::INT(2)),
+				Expression::LITERAL(Literal::STRING(String::from("ten"))) => Expression::LITERAL(Literal::INT(10))
 			]})),
 		},
 		Test {
 			input: r#"{"one": 0 + 1, "two": 10 - 8, "ten": 50 / 5}"#,
-			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: vec![
-				(Expression::LITERAL(Literal::STRING(String::from("one"))), Expression::INFIX(
+			expected: Statement::EXPRESSION(Expression::HASH(HashLiteral{pairs: hashmap![
+				Expression::LITERAL(Literal::STRING(String::from("one"))) => Expression::INFIX(
 					InfixExpression{
 						left: Box::new(Expression::LITERAL(Literal::INT(0))),
 						operator: InfixType::PLUS,
 						right: Box::new(Expression::LITERAL(Literal::INT(1))),
 					}
-				)),
-				(Expression::LITERAL(Literal::STRING(String::from("two"))), Expression::INFIX(
+				),
+				Expression::LITERAL(Literal::STRING(String::from("two"))) => Expression::INFIX(
 					InfixExpression{
 						left: Box::new(Expression::LITERAL(Literal::INT(10))),
 						operator: InfixType::MINUS,
 						right: Box::new(Expression::LITERAL(Literal::INT(8))),
 					}
-				)),
-				(Expression::LITERAL(Literal::STRING(String::from("ten"))), Expression::INFIX(
+				),
+				Expression::LITERAL(Literal::STRING(String::from("ten"))) => Expression::INFIX(
 					InfixExpression{
 						left: Box::new(Expression::LITERAL(Literal::INT(50))),
 						operator: InfixType::DIVISION,
 						right: Box::new(Expression::LITERAL(Literal::INT(5))),
 					}
-				)),
+				)
 			]})),
 		},
 	];

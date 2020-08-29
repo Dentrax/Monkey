@@ -5,6 +5,7 @@ use crate::lexer::lexer::*;
 
 use std::{fmt};
 use std::fmt::{Error};
+use std::collections::HashMap;
 
 type ParserPrefixFunc = fn(&mut Parser) -> Result<Expression, ParserError>;
 type ParserInfixFunc = fn(&mut Parser, Expression) -> Result<Expression, ParserError>;
@@ -359,7 +360,7 @@ impl Parser {
 	}
 
 	fn parse_literal_hash(&mut self) -> Result<Expression, ParserError> {
-		let mut pairs = vec![];
+		let mut pairs = HashMap::new();
 
 		while !self.peek_token_is(Token::RBRACE) {
 			self.next_token();
@@ -370,7 +371,7 @@ impl Parser {
 			self.next_token();
 			let value = self.parse_expression(Precedence::LOWEST)?;
 
-			pairs.push((key, value));
+			pairs.insert(key, value);
 
 			if !self.peek_token_is(Token::RBRACE) {
 				self.expect_peek(Token::COMMA)?;

@@ -79,6 +79,7 @@ pub enum OpCodeType {
 	GG = 16,
 	GS = 17,
 	ARR = 18,
+	HASH = 19,
 }
 
 impl From<u8> for OpCodeType {
@@ -103,6 +104,7 @@ impl From<u8> for OpCodeType {
 			16 => OpCodeType::GG,
 			17 => OpCodeType::GS,
 			18 => OpCodeType::ARR,
+			19 => OpCodeType::HASH,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -190,6 +192,10 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::ARR => Definition {
 			name: "OpArray",
+			operand_widths: vec![2],
+		},
+		OpCodeType::HASH => Definition {
+			name: "OpHash",
 			operand_widths: vec![2],
 		}
 	}

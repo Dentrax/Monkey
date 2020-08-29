@@ -300,6 +300,52 @@ fn test_literal_array() {
 }
 
 #[test]
+fn test_literal_hash() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "{}",
+			expectedConstants: vec![],
+			expectedInstructions: vec![
+				make(OpCodeType::HASH, &vec![0]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "{1: 2, 3: 4, 5: 6}",
+			expectedConstants: vec![Object::INTEGER(1), Object::INTEGER(2), Object::INTEGER(3), Object::INTEGER(4), Object::INTEGER(5), Object::INTEGER(6)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![3]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![4]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![5]).unwrap(),
+				make(OpCodeType::HASH, &vec![6]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "{1: 2 + 3, 4: 5 * 6}",
+			expectedConstants: vec![Object::INTEGER(1), Object::INTEGER(2), Object::INTEGER(3), Object::INTEGER(4), Object::INTEGER(5), Object::INTEGER(6)],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::ADD, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![3]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![4]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![5]).unwrap(),
+				make(OpCodeType::MUL, &vec![0]).unwrap(),
+				make(OpCodeType::HASH, &vec![4]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
 fn test_conditionals() {
 	let tests = vec![
 		CompilerTestCase {

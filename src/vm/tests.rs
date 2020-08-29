@@ -3,9 +3,20 @@ use crate::parser::parser::Parser;
 use crate::lexer::lexer::Lexer;
 use crate::compiler::compiler::Compiler;
 use crate::ast::ast::Node::PROGRAM;
-use crate::vm::vm::VM;
+use crate::ast::ast::*;
 use crate::ast::ast::Expression::ARRAY;
+use crate::vm::vm::VM;
 use crate::types::array::Array;
+use crate::ast::ast::HashLiteral;
+use crate::types::hashable::{Hash, Hashable};
+
+macro_rules! hashmap {
+    ($( $key: expr => $val: expr ),*) => {{
+         let mut map = ::std::collections::HashMap::new();
+         $( map.insert($key, $val); )*
+         map
+    }}
+}
 
 struct VMTestCase<'a> {
 	input: &'a str,
@@ -237,6 +248,32 @@ fn test_literal_array() {
 }
 
 #[test]
+fn test_literal_hash() {
+	let tests = vec![
+		VMTestCase {
+			input: "{}",
+			expected: Object::HASH(Hash { pairs: hashmap![] }),
+		},
+		VMTestCase {
+			input: "{1: 2, 2: 3}",
+			expected: Object::HASH(Hash { pairs: hashmap![
+				Hashable::INTEGER(1) => Object::INTEGER(2),
+				Hashable::INTEGER(2) => Object::INTEGER(3)
+			]})
+		},
+		VMTestCase {
+			input: "{1 + 1: 2 * 2, 3 + 3: 4 * 4}",
+			expected: Object::HASH(Hash { pairs: hashmap![
+				Hashable::INTEGER(2) => Object::INTEGER(4),
+				Hashable::INTEGER(6) => Object::INTEGER(16)
+			]}),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
 fn test_conditionals() {
 	let tests = vec![
 		VMTestCase {
@@ -351,6 +388,11 @@ fn test_expected_object(input: &str, expected: &Object, actual: &Object) {
 		(Object::ARRAY(l), Object::ARRAY(r)) => {
 			if l != r {
 				panic!("array object has wrong value for `{:#?}`. got: {:#?}, want: {:#?}", input, r, l)
+			}
+		}
+		(Object::HASH(l), Object::HASH(r)) => {
+			if l != r {
+				panic!("hash object has wrong value for `{:#?}`. got: {:?}, want: {:?}", input, r, l)
 			}
 		}
 		(Object::NULL, a) => {

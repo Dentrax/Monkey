@@ -21,6 +21,17 @@ impl fmt::Display for Hashable {
 	}
 }
 
+impl Hashable {
+	pub fn lookup(obj: Object) -> Hashable {
+		match obj {
+			Object::INTEGER(i) => Hashable::INTEGER(i),
+			Object::STRING(i) => Hashable::STRING(i),
+			Object::BOOLEAN(i) => Hashable::BOOLEAN(i),
+			_ => panic!("unhandled Object to Hashable conversation")
+		}
+	}
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Hash {
 	pub pairs: HashMap<Hashable, Object>,

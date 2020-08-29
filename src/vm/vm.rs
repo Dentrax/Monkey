@@ -3,6 +3,8 @@ use crate::code::code::{Instructions, OpCodeType, read_uint16};
 use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
 use crate::types::array::Array;
+use std::collections::HashMap;
+use crate::types::hashable::{Hash, Hashable};
 
 const STACK_SIZE: usize = 2048;
 const GLOBAL_SIZE: usize = 65536;
@@ -121,6 +123,15 @@ impl<'a> VM<'a> {
 					self.sp -= global_index;
 
 					self.push(array);
+				}
+				OpCodeType::HASH => {
+					let global_index = read_uint16(&self.instructions[ip + 1..]);
+					ip += 2;
+
+					let hash = self.build_hash(self.sp - global_index, self.sp);
+					self.sp -= global_index;
+
+					self.push(hash);
 				}
 				OpCodeType::NULL => {
 					self.push(OBJ_NULL);
@@ -244,6 +255,19 @@ impl<'a> VM<'a> {
 		}
 
 		Object::ARRAY(Array { elements })
+	}
+
+	fn build_hash(&self, index_start: usize, index_end: usize) -> Object {
+		let mut pairs = HashMap::new();
+
+		for i in (index_start..index_end).step_by(2) {
+			let key = Hashable::lookup(self.stack[i].clone());
+			let value = self.stack[i + 1].clone();
+
+			pairs.insert(key, value);
+		}
+
+		Object::HASH(Hash { pairs })
 	}
 
 	fn push(&mut self, o: Object) {
