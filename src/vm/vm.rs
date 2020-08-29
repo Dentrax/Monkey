@@ -2,6 +2,7 @@ use crate::types::object::{Object, OBJ_NULL, OBJ_TRUE, OBJ_FALSE};
 use crate::code::code::{Instructions, OpCodeType, read_uint16};
 use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
+use crate::types::array::Array;
 
 const STACK_SIZE: usize = 2048;
 const GLOBAL_SIZE: usize = 65536;
@@ -112,6 +113,15 @@ impl<'a> VM<'a> {
 
 					self.push(self.globals[global_index].clone());
 				}
+				OpCodeType::ARR => {
+					let global_index = read_uint16(&self.instructions[ip + 1..]);
+					ip += 2;
+
+					let array = self.build_array(self.sp - global_index, self.sp);
+					self.sp -= global_index;
+
+					self.push(array);
+				}
 				OpCodeType::NULL => {
 					self.push(OBJ_NULL);
 				}
@@ -129,7 +139,7 @@ impl<'a> VM<'a> {
 		match (right.borrow(), left.borrow()) {
 			(Object::INTEGER(r), Object::INTEGER(l)) => {
 				self.execute_binary_operation_integer(op, *l, *r);
-			},
+			}
 			(Object::STRING(r), Object::STRING(l)) => {
 				self.execute_binary_operation_string(op, l.to_string(), r.to_string());
 			}
@@ -223,6 +233,17 @@ impl<'a> VM<'a> {
 			}
 			_ => panic!("unsupported type for negation: {:?}", operand)
 		};
+	}
+
+	fn build_array(&self, index_start: usize, index_end: usize) -> Object {
+		let mut elements = Vec::with_capacity(index_end - index_start);
+		elements.resize(index_end - index_start, OBJ_NULL);
+
+		for i in index_start..index_end {
+			elements[i - index_start] = self.stack[i].clone();
+		}
+
+		Object::ARRAY(Array { elements })
 	}
 
 	fn push(&mut self, o: Object) {

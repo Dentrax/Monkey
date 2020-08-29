@@ -1,4 +1,5 @@
 extern crate byteorder;
+
 use byteorder::{BigEndian, WriteBytesExt};
 use std::error::Error;
 use std::{fmt, convert};
@@ -77,6 +78,7 @@ pub enum OpCodeType {
 	NULL = 15,
 	GG = 16,
 	GS = 17,
+	ARR = 18,
 }
 
 impl From<u8> for OpCodeType {
@@ -100,6 +102,7 @@ impl From<u8> for OpCodeType {
 			15 => OpCodeType::NULL,
 			16 => OpCodeType::GG,
 			17 => OpCodeType::GS,
+			18 => OpCodeType::ARR,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -184,6 +187,10 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		OpCodeType::GS => Definition {
 			name: "OpGlobalSet",
 			operand_widths: vec![2],
+		},
+		OpCodeType::ARR => Definition {
+			name: "OpArray",
+			operand_widths: vec![2],
 		}
 	}
 }
@@ -199,12 +206,12 @@ pub fn make(op: OpCodeType, operands: &Vec<usize>) -> Result<Vec<u8>, CodeError>
 		match width {
 			2 => match instructions.write_u16::<BigEndian>(*operand as u16) {
 				Err(e) => {
-					return Err(CodeError::WRITE_OPERAND(*operand as u16))
+					return Err(CodeError::WRITE_OPERAND(*operand as u16));
 				}
 				_ => {}
 			}
 			_ => {
-				return Err(CodeError::UNEXPECTED_WIDTH(width))
+				return Err(CodeError::UNEXPECTED_WIDTH(width));
 			}
 		}
 	}

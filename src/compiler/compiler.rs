@@ -267,6 +267,12 @@ impl Compiler {
 					}
 				}
 			},
+			ast::Expression::ARRAY(arr) => {
+				for a in &arr.elements {
+					self.compile_expression(a)?;
+				}
+				self.emit(OpCodeType::ARR, &vec![arr.elements.len()]);
+			},
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};
 
