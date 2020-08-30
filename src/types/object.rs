@@ -9,8 +9,10 @@ use std::{fmt};
 use std::fmt::{Formatter};
 use std::rc::Rc;
 use std::cell::RefCell;
+use crate::code::code::Instructions;
 
 pub const STR_FUNCTION: &'static str = "FUNCTION";
+pub const STR_COMPILED_FUNCTION: &'static str = "COMPILED_FUNCTION";
 pub const STR_BUILTIN: &'static str = "BUILTIN";
 pub const STR_ARRAY: &'static str = "ARRAY";
 pub const STR_HASH: &'static str = "HASH";
@@ -41,8 +43,20 @@ impl fmt::Display for Function {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct CompiledFunction {
+	pub instructions: Instructions,
+}
+
+impl fmt::Display for CompiledFunction {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "<compiled fn()> {{\n{:#?}\n}}", self.instructions)
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Object {
 	FUNCTION(Function),
+	COMPILED_FUNCTION(CompiledFunction),
 	BUILTIN(Builtin),
 	ARRAY(Array),
 	HASH(Hash),
@@ -57,6 +71,10 @@ pub enum Object {
 impl Object {
 	pub fn is_function(&self) -> bool {
 		self.get_type() == STR_FUNCTION
+	}
+
+	pub fn is_compiled_function(&self) -> bool {
+		self.get_type() == STR_COMPILED_FUNCTION
 	}
 
 	pub fn is_builtin(&self) -> bool {
@@ -98,6 +116,7 @@ impl Object {
 	pub fn get_type(&self) -> &str {
 		match self {
 			Object::FUNCTION(_) => STR_FUNCTION,
+			Object::COMPILED_FUNCTION(_) => STR_COMPILED_FUNCTION,
 			Object::BUILTIN(_) => STR_BUILTIN,
 			Object::ARRAY(_) => STR_ARRAY,
 			Object::HASH(_) => STR_HASH,
@@ -123,6 +142,7 @@ impl fmt::Display for Object {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Object::FUNCTION(func) => func.fmt(f),
+			Object::COMPILED_FUNCTION(func) => func.fmt(f),
 			Object::BUILTIN(b) => b.fmt(f),
 			Object::ARRAY(a) => a.fmt(f),
 			Object::HASH(h) => h.fmt(f),

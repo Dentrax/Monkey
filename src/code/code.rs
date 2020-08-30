@@ -81,6 +81,9 @@ pub enum OpCodeType {
 	ARR = 18,
 	HASH = 19,
 	ID = 20,
+	CALL = 21,
+	RETV = 22,
+	RET = 23,
 }
 
 impl From<u8> for OpCodeType {
@@ -107,6 +110,9 @@ impl From<u8> for OpCodeType {
 			18 => OpCodeType::ARR,
 			19 => OpCodeType::HASH,
 			20 => OpCodeType::ID,
+			21 => OpCodeType::CALL,
+			22 => OpCodeType::RETV,
+			23 => OpCodeType::RET,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -202,6 +208,18 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::ID => Definition {
 			name: "OpIndex",
+			operand_widths: vec![],
+		},
+		OpCodeType::CALL => Definition {
+			name: "OpCall",
+			operand_widths: vec![2],
+		},
+		OpCodeType::RETV => Definition {
+			name: "OpReturnValue",
+			operand_widths: vec![],
+		},
+		OpCodeType::RET => Definition {
+			name: "OpReturn",
 			operand_widths: vec![],
 		}
 	}

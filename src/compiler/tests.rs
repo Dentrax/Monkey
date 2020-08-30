@@ -1,4 +1,4 @@
-use crate::types::object::Object;
+use crate::types::object::{Object, CompiledFunction};
 use crate::code::code::{Instructions, make, OpCodeType, IInstructions};
 use crate::parser::parser::Parser;
 use crate::lexer::lexer::Lexer;
@@ -435,6 +435,120 @@ fn test_conditionals() {
 }
 
 #[test]
+fn test_functions() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "fn() { return 5 + 10 }",
+			expectedConstants: vec![
+				Object::INTEGER(5),
+				Object::INTEGER(10),
+				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
+					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+					make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+					make(OpCodeType::ADD, &vec![]).unwrap(),
+					make(OpCodeType::RETV, &vec![]).unwrap(),
+
+				])})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "fn() { 5 + 10 }",
+			expectedConstants: vec![
+				Object::INTEGER(5),
+				Object::INTEGER(10),
+				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
+					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+					make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+					make(OpCodeType::ADD, &vec![]).unwrap(),
+					make(OpCodeType::RETV, &vec![]).unwrap(),
+
+				])})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "fn() { 1; 2 }",
+			expectedConstants: vec![
+				Object::INTEGER(1),
+				Object::INTEGER(2),
+				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
+					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+					make(OpCodeType::POP, &vec![]).unwrap(),
+					make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+					make(OpCodeType::RETV, &vec![]).unwrap(),
+
+				])})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "fn() { }",
+			expectedConstants: vec![
+				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
+					make(OpCodeType::RET, &vec![]).unwrap(),
+				])})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
+fn test_compiler_scopes() {
+	let mut compiler = Compiler::new();
+
+	assert_eq!(compiler.scope_index, 0);
+
+	compiler.emit(OpCodeType::MUL, &vec![]);
+
+	compiler.enter_scope();
+
+	assert_eq!(compiler.scope_index, 1);
+
+	compiler.emit(OpCodeType::SUB, &vec![]);
+
+	assert_eq!(compiler.scopes[compiler.scope_index].instructions.len(), 1);
+
+	match &compiler.scopes[compiler.scope_index].last_instruction {
+		Some(i) => assert_eq!(i.opcode, OpCodeType::SUB),
+		None => panic!("last_instruction not found in scope index: {}", compiler.scope_index)
+	}
+
+	compiler.leave_scope();
+
+	assert_eq!(compiler.scope_index, 0);
+
+	compiler.emit(OpCodeType::ADD, &vec![]);
+
+	assert_eq!(compiler.scopes[compiler.scope_index].instructions.len(), 2);
+
+	match &compiler.scopes[compiler.scope_index].last_instruction {
+		Some(i) => assert_eq!(i.opcode, OpCodeType::ADD),
+		None => panic!("last_instruction not found in scope index: {}", compiler.scope_index)
+	}
+
+	match &compiler.scopes[compiler.scope_index].prev_instruction {
+		Some(i) => assert_eq!(i.opcode, OpCodeType::MUL),
+		None => panic!("prev_instruction not found in scope index: {}", compiler.scope_index)
+	}
+}
+
+#[test]
 fn test_global_let_statements() {
 	let tests = vec![
 		CompilerTestCase {
@@ -472,6 +586,10 @@ fn test_global_let_statements() {
 	];
 
 	run_compiler_tests(tests);
+}
+
+fn merge_instructions(instructions: Vec<Instructions>) -> Instructions {
+	instructions.into_iter().flatten().collect::<Instructions>()
 }
 
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
@@ -546,6 +664,11 @@ fn test_constants(expected: &Vec<Object>, actual: &Vec<Object>) -> Result<(), Co
 			(Object::STRING(l), Object::STRING(r)) => {
 				if l != r {
 					return Err(CompilerError::WRONG_CONSTANTS_STRING_EQUALITY { want: l.clone(), got: r.clone() });
+				}
+			},
+			(Object::COMPILED_FUNCTION(l), Object::COMPILED_FUNCTION(r)) => {
+				if l != r {
+					return Err(CompilerError::WRONG_COMPILED_FUNCTION_EQUALITY { want: l.clone(), got: r.clone() });
 				}
 			}
 			_ => {

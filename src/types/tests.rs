@@ -62,6 +62,7 @@ fn test_objects() {
 
 		match test.input {
 			Object::FUNCTION(_) => assert_eq!(test.input.is_function(), true),
+			Object::COMPILED_FUNCTION(_) => assert_eq!(test.input.is_compiled_function(), true),
 			Object::BUILTIN(_) => assert_eq!(test.input.is_builtin(), true),
 			Object::ARRAY(_) => assert_eq!(test.input.is_array(), true),
 			Object::HASH(_) => assert_eq!(test.input.is_hash(), true),
