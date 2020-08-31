@@ -334,6 +334,11 @@ impl Compiler {
 
 				self.emit(OpCodeType::CONSTANT, ops);
 			}
+			ast::Expression::CALL(call) => {
+				self.compile_expression(&call.function);
+
+				self.emit(OpCodeType::CALL, &vec![]);
+			}
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};
 

@@ -509,6 +509,48 @@ fn test_functions() {
 }
 
 #[test]
+fn test_function_calls() {
+	let tests = vec![
+		CompilerTestCase {
+			input: "fn() { 24 }();",
+			expectedConstants: vec![
+				Object::INTEGER(24),
+				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
+					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+					make(OpCodeType::RETV, &vec![]).unwrap(),
+
+				])})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CALL, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "let noArg = fn() { 24 }; noArg();",
+			expectedConstants: vec![
+				Object::INTEGER(24),
+				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
+					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+					make(OpCodeType::RETV, &vec![]).unwrap(),
+
+				])})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::GG, &vec![0]).unwrap(),
+				make(OpCodeType::CALL, &vec![]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
 fn test_compiler_scopes() {
 	let mut compiler = Compiler::new();
 
