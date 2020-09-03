@@ -448,6 +448,11 @@ fn test_expected_object(input: &str, expected: &Object, actual: &Object) {
 				panic!("null object is not null value for `{}`. got: {}, want: NULL", input, a.to_string())
 			}
 		}
+		(a, Object::NULL) => {
+			if !a.is_null() {
+				panic!("null object received for `{}`. got: NULL, want: {}", input, a.to_string())
+			}
+		}
 		_ => panic!("Unexpected comparison types for `{}`. expected: {:?}, actual: {:?}", input, expected, actual)
 	}
 }

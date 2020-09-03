@@ -89,8 +89,8 @@ impl fmt::Display for CompilerError {
 }
 
 pub struct Bytecode<'a> {
-	pub(crate) instructions: &'a Instructions,
-	pub(crate) constants: &'a Vec<Object>,
+	pub instructions: &'a Instructions,
+	pub constants: &'a Vec<Object>,
 }
 
 impl Compiler {

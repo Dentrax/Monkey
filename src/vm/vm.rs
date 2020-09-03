@@ -1,21 +1,26 @@
-use crate::types::object::{Object, OBJ_NULL, OBJ_TRUE, OBJ_FALSE};
+use crate::types::object::{Object, OBJ_NULL, OBJ_TRUE, OBJ_FALSE, CompiledFunction};
 use crate::code::code::{Instructions, OpCodeType, read_uint16};
 use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
 use crate::types::array::Array;
 use std::collections::HashMap;
 use crate::types::hashable::{Hash, Hashable};
+use crate::vm::frame::Frame;
 
 const STACK_SIZE: usize = 2048;
 const GLOBAL_SIZE: usize = 65536;
+const FRAMES_SIZE: usize = 1024;
 
 pub struct VM<'a> {
 	constants: &'a Vec<Object>,
-	instructions: &'a Instructions,
+
 	pub globals: Vec<Object>,
 
 	stack: Vec<Object>,
 	sp: usize,
+
+	frames: Vec<Frame>,
+	frames_index: usize,
 }
 
 impl<'a> VM<'a> {
@@ -25,11 +30,14 @@ impl<'a> VM<'a> {
 
 		VM {
 			constants: bytecode.constants,
-			instructions: bytecode.instructions,
-			globals: VM::new_globals(),
 
 			stack, //TODO: resize with null obj
 			sp: 0,
+
+			globals: VM::new_globals(),
+
+			frames: VM::new_frames(bytecode.instructions.to_owned()),
+			frames_index: 1,
 		}
 	}
 
@@ -45,6 +53,17 @@ impl<'a> VM<'a> {
 		return globals;
 	}
 
+	fn new_frames(instructions: Instructions) -> Vec<Frame> {
+		let mut frames = Vec::with_capacity(FRAMES_SIZE);
+
+		let main_fn = CompiledFunction { instructions };
+		let main_frame = Frame::new(main_fn);
+
+		frames.push(main_frame);
+
+		frames
+	}
+
 	pub fn stack_top(&self) -> Option<&Object> {
 		if self.sp == 0 {
 			return None;
@@ -53,18 +72,21 @@ impl<'a> VM<'a> {
 		self.stack.get(self.sp - 1)
 	}
 
+	fn set_ip(&mut self, ip: usize) {
+		self.frames[self.frames_index].ip = ip;
+	}
+
 	//FIXME: remove clone()s
 	pub fn run(&mut self) {
-		let mut ip = 0;
-
-		while ip < self.instructions.len() {
-			let op_code = self.instructions[ip];
-			let op = OpCodeType::from(op_code);
+		while self.current_frame().ip < self.current_frame().instructions().len() {
+			let ip = self.current_frame().ip;
+			let ins = self.current_frame().instructions();
+			let op = OpCodeType::from(ins[ip]);
 
 			match op {
 				OpCodeType::CONSTANT => {
-					let const_index = read_uint16(&self.instructions[ip + 1..]);
-					ip += 2;
+					let const_index = read_uint16(&ins[ip + 1..]);
+					self.current_frame().ip = ip + 2;
 
 					self.push(self.constants[const_index].clone());
 				}
@@ -90,34 +112,34 @@ impl<'a> VM<'a> {
 					self.execute_operator_minus();
 				}
 				OpCodeType::JMP => {
-					let pos = read_uint16(&self.instructions[ip + 1..]);
-					ip = pos - 1;
+					let pos = read_uint16(&ins[ip + 1..]);
+					self.current_frame().ip = pos - 1;
 				}
 				OpCodeType::JMPNT => {
-					let pos = read_uint16(&self.instructions[ip + 1..]);
-					ip += 2; //skip over the two bytes of the operand in the next cycle
+					let pos = read_uint16(&ins[ip + 1..]);
+					self.current_frame().ip += 2;
 
 					let condition = self.pop();
 
 					if !condition.is_truthy() {
-						ip = pos - 1;
+						self.current_frame().ip = pos - 1;
 					}
 				}
 				OpCodeType::GS => {
-					let global_index = read_uint16(&self.instructions[ip + 1..]);
-					ip += 2;
+					let global_index = read_uint16(&ins[ip + 1..]);
+					self.current_frame().ip += 2;
 
 					self.globals[global_index] = self.pop().clone();
 				}
 				OpCodeType::GG => {
-					let global_index = read_uint16(&self.instructions[ip + 1..]);
-					ip += 2;
+					let global_index = read_uint16(&ins[ip + 1..]);
+					self.current_frame().ip += 2;
 
 					self.push(self.globals[global_index].clone());
 				}
 				OpCodeType::ARR => {
-					let global_index = read_uint16(&self.instructions[ip + 1..]);
-					ip += 2;
+					let global_index = read_uint16(&ins[ip + 1..]);
+					self.current_frame().ip += 2;
 
 					let array = self.build_array(self.sp - global_index, self.sp);
 					self.sp -= global_index;
@@ -125,8 +147,8 @@ impl<'a> VM<'a> {
 					self.push(array);
 				}
 				OpCodeType::HASH => {
-					let global_index = read_uint16(&self.instructions[ip + 1..]);
-					ip += 2;
+					let global_index = read_uint16(&ins[ip + 1..]);
+					self.current_frame().ip += 2;
 
 					let hash = self.build_hash(self.sp - global_index, self.sp);
 					self.sp -= global_index;
@@ -144,9 +166,13 @@ impl<'a> VM<'a> {
 				}
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
-
-			ip += 1;
+			self.current_frame().ip += 1;
 		};
+	}
+
+	fn read_op(&self, ip: usize) -> OpCodeType {
+		let ins = &self.frames[self.frames_index].cf.instructions;
+		OpCodeType::from(ins[ip])
 	}
 
 	fn execute_binary_operation(&mut self, op: OpCodeType) { //TODO: return err
@@ -256,10 +282,10 @@ impl<'a> VM<'a> {
 		match (left.borrow(), index.borrow()) {
 			(Object::ARRAY(arr), Object::INTEGER(i)) => {
 				self.execute_expression_index_array(arr, *i)
-			},
+			}
 			(Object::HASH(hash), _) => {
 				self.execute_expression_index_hash(hash, index);
-			},
+			}
 			_ => panic!("unsupported type for index: {:#?} {:#?}", left.clone(), index.clone())
 		}
 	}
@@ -267,7 +293,7 @@ impl<'a> VM<'a> {
 	fn execute_expression_index_array(&mut self, array: &Array, index: isize) {
 		if index < 0 || index > array.elements.len() as isize {
 			self.push(OBJ_NULL);
-			return
+			return;
 		}
 
 		match array.elements.get(index as usize) {
@@ -297,7 +323,7 @@ impl<'a> VM<'a> {
 	}
 
 	fn build_hash(&self, index_start: usize, index_end: usize) -> Object {
-		let mut pairs = HashMap::new();
+		let mut pairs = HashMap::new(); //TODO: cap, remove clones
 
 		for i in (index_start..index_end).step_by(2) {
 			let key = Hashable::lookup(self.stack[i].clone());
@@ -326,5 +352,19 @@ impl<'a> VM<'a> {
 
 	pub fn last_popped_stack_elem(&self) -> Option<&Object> {
 		self.stack.get(self.sp)
+	}
+
+	fn current_frame(&mut self) -> &mut Frame {
+		&mut self.frames[self.frames_index - 1]
+	}
+
+	fn push_frame(&mut self, frame: Frame) {
+		self.frames.push(frame);
+		self.frames_index += 1;
+	}
+
+	fn pop_frame(&mut self) -> Frame {
+		self.frames_index -= 1;
+		self.frames.pop().expect("empty frames")
 	}
 }
