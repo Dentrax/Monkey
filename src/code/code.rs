@@ -3,7 +3,7 @@ extern crate byteorder;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::error::Error;
 use std::{fmt, convert};
-use self::byteorder::ByteOrder;
+use self::byteorder::{ByteOrder, ReadBytesExt};
 
 pub type Instructions = Vec<u8>;
 
@@ -84,6 +84,8 @@ pub enum OpCodeType {
 	CALL = 21,
 	RETV = 22,
 	RET = 23,
+	LG = 24,
+	LS = 25,
 }
 
 impl From<u8> for OpCodeType {
@@ -113,6 +115,8 @@ impl From<u8> for OpCodeType {
 			21 => OpCodeType::CALL,
 			22 => OpCodeType::RETV,
 			23 => OpCodeType::RET,
+			24 => OpCodeType::LG,
+			25 => OpCodeType::LS,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -221,6 +225,14 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		OpCodeType::RET => Definition {
 			name: "OpReturn",
 			operand_widths: vec![],
+		},
+		OpCodeType::LG => Definition {
+			name: "OpGetLocal",
+			operand_widths: vec![1],
+		},
+		OpCodeType::LS => Definition {
+			name: "OpSetLocal",
+			operand_widths: vec![1],
 		}
 	}
 }
@@ -239,7 +251,13 @@ pub fn make(op: OpCodeType, operands: &Vec<usize>) -> Result<Vec<u8>, CodeError>
 					return Err(CodeError::WRITE_OPERAND(*operand as u16));
 				}
 				_ => {}
-			}
+			},
+			1 => match instructions.write_u8(*operand as u8) {
+				Err(e) => {
+					return Err(CodeError::WRITE_OPERAND(*operand as u8 as u16));
+				}
+				_ => {}
+			},
 			_ => {
 				return Err(CodeError::UNEXPECTED_WIDTH(width));
 			}
@@ -258,7 +276,10 @@ pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<usize>, usize) {
 			2 => {
 				let value = BigEndian::read_u16(&ins[offset..]);
 				operands.push(value as usize);
-			}
+			},
+			1 => {
+				operands.push(ins[offset] as usize);
+			},
 			_ => panic!("unexpected width {}", width)
 		}
 		offset += *width as usize;
