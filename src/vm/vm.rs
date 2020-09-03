@@ -181,6 +181,12 @@ impl<'a> VM<'a> {
 
 					self.push(returned);
 				}
+				OpCodeType::RET => {
+					self.pop_frame();
+					self.pop();
+
+					self.push(OBJ_NULL);
+				}
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 			self.current_frame().ip += 1;

@@ -424,6 +424,46 @@ fn test_functions_call_with_returns() {
 }
 
 #[test]
+fn test_functions_call_without_return_value() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let noReturn = fn() { };
+			noReturn();
+			"#,
+			expected: OBJ_NULL,
+		},
+		VMTestCase {
+			input: r#"
+			let noReturn = fn() { };
+			let noReturnTwo = fn() { noReturn(); };
+			noReturn();
+			noReturnTwo();
+			"#,
+			expected: OBJ_NULL,
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
+fn test_functions_first_class() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let returnsOne = fn() { 1; };
+			let returnsOneReturner = fn() { returnsOne; };
+			returnsOneReturner()();
+			"#,
+			expected: Object::INTEGER(1),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
 fn test_global_let_statements() {
 	let tests = vec![
 		VMTestCase {
