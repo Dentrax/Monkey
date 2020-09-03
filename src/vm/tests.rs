@@ -370,6 +370,60 @@ fn test_conditionals() {
 }
 
 #[test]
+fn test_functions_call_without_args() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let fivePlusTen = fn() { 5 + 10; };
+			fivePlusTen();
+			"#,
+			expected: Object::INTEGER(15),
+		},
+		VMTestCase {
+			input: r#"
+			let one = fn() { 1; };
+			let two = fn() { 2; };
+			one() + two()
+			"#,
+			expected: Object::INTEGER(3),
+		},
+		VMTestCase {
+			input: r#"
+			let a = fn() { 1 };
+			let b = fn() { a() + 1 };
+			let c = fn() { b() + 1 };
+			c();
+			"#,
+			expected: Object::INTEGER(3),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
+fn test_functions_call_with_returns() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let earlyExit = fn() { return 99; 100; };
+			earlyExit();
+			"#,
+			expected: Object::INTEGER(99),
+		},
+		VMTestCase {
+			input: r#"
+			let earlyExit = fn() { return 99; return 100; };
+			earlyExit();
+			"#,
+			expected: Object::INTEGER(99),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
 fn test_global_let_statements() {
 	let tests = vec![
 		VMTestCase {

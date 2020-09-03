@@ -164,6 +164,23 @@ impl<'a> VM<'a> {
 				OpCodeType::NULL => {
 					self.push(OBJ_NULL);
 				}
+				OpCodeType::CALL => {
+					let frame = match self.stack[self.sp - 1].clone() {
+						Object::COMPILED_FUNCTION(cf) => cf,
+						_ => panic!("not a compiled function received")
+					};
+					self.push_frame(Frame::new(frame));
+					//prevent to increment the frame ip
+					continue;
+				}
+				OpCodeType::RETV => {
+					let returned = self.pop().to_owned();
+
+					self.pop_frame();
+					self.pop();
+
+					self.push(returned);
+				}
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 			self.current_frame().ip += 1;
