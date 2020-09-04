@@ -7,6 +7,8 @@ use std::fmt::Error;
 use crate::ast::ast::Node::PROGRAM;
 use std::collections::HashMap;
 use crate::compiler::symbol_table::{Symbol, SymbolTable, SymbolScope};
+use std::borrow::Borrow;
+use std::ops::Deref;
 
 struct CompilerTestCase<'a> {
 	input: &'a str,
@@ -14,13 +16,22 @@ struct CompilerTestCase<'a> {
 	expectedInstructions: Vec<Instructions>,
 }
 
+struct SymbolTableTestCase {
+	table: SymbolTable,
+	expectedSymbols: Vec<Symbol>,
+}
+
 // SYMBOL-TABLE TESTS
 
 #[test]
 fn test_symbol_table_define() {
 	let mut expected: HashMap<String, Symbol> = HashMap::new();
-	expected.insert("a".to_string(), Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0, }, );
-	expected.insert("b".to_string(), Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1, }, );
+	expected.insert("a".to_string(), Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0 });
+	expected.insert("b".to_string(), Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1 });
+	expected.insert("c".to_string(), Symbol { name: "c".to_string(), scope: SymbolScope::LOCAL, index: 0 });
+	expected.insert("d".to_string(), Symbol { name: "d".to_string(), scope: SymbolScope::LOCAL, index: 1 });
+	expected.insert("e".to_string(), Symbol { name: "e".to_string(), scope: SymbolScope::LOCAL, index: 0 });
+	expected.insert("f".to_string(), Symbol { name: "f".to_string(), scope: SymbolScope::LOCAL, index: 1 });
 
 	let mut global = SymbolTable::new();
 
@@ -29,6 +40,22 @@ fn test_symbol_table_define() {
 
 	let b = global.define("b");
 	assert_eq!(&b, expected.get("b").unwrap());
+
+	let mut local_first = SymbolTable::new_enclosed(global);
+
+	let c = local_first.define("c");
+	assert_eq!(&c, expected.get("c").unwrap());
+
+	let d = local_first.define("d");
+	assert_eq!(&d, expected.get("d").unwrap());
+
+	let mut local_second = SymbolTable::new_enclosed(local_first);
+
+	let e = local_second.define("e");
+	assert_eq!(&e, expected.get("e").unwrap());
+
+	let f = local_second.define("f");
+	assert_eq!(&f, expected.get("f").unwrap());
 }
 
 #[test]
@@ -38,13 +65,83 @@ fn test_symbol_table_resolve() {
 	global.define("b");
 
 	let mut expected: HashMap<String, Symbol> = HashMap::new();
-	expected.insert("a".to_string(), Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0, }, );
-	expected.insert("b".to_string(), Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1, }, );
+	expected.insert("a".to_string(), Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0 });
+	expected.insert("b".to_string(), Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1 });
 
 	for (s, sym) in expected {
 		let result = global.resolve(&*sym.name);
 
 		assert_eq!(result.unwrap(), &sym);
+	}
+}
+
+#[test]
+fn test_symbol_table_resolve_local() {
+	let mut global = SymbolTable::new();
+	global.define("a");
+	global.define("b");
+
+	let mut local = SymbolTable::new_enclosed(global);
+	local.define("c");
+	local.define("d");
+
+	let mut expected: HashMap<String, Symbol> = HashMap::new();
+	expected.insert("a".to_string(), Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0 });
+	expected.insert("b".to_string(), Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1 });
+	expected.insert("c".to_string(), Symbol { name: "c".to_string(), scope: SymbolScope::LOCAL, index: 0 });
+	expected.insert("d".to_string(), Symbol { name: "d".to_string(), scope: SymbolScope::LOCAL, index: 1 });
+
+	for (s, sym) in expected {
+		let result = local.resolve(&*sym.name);
+
+		assert_eq!(result.unwrap(), &sym);
+	}
+}
+
+#[test]
+fn test_symbol_table_resolve_local_nested() {
+	let mut global = SymbolTable::new();
+	global.define("a");
+	global.define("b");
+
+	let mut local_first = SymbolTable::new_enclosed(global);
+	local_first.define("c");
+	local_first.define("d");
+
+	let mut local_second = SymbolTable::new_enclosed(local_first.clone());
+	local_second.define("e");
+	local_second.define("f");
+
+	let tests = vec![
+		SymbolTableTestCase {
+			table: local_first.clone(),
+			expectedSymbols: vec![
+				Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0 },
+				Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1 },
+				Symbol { name: "c".to_string(), scope: SymbolScope::LOCAL, index: 0 },
+				Symbol { name: "d".to_string(), scope: SymbolScope::LOCAL, index: 1 },
+			]
+		},
+		SymbolTableTestCase {
+			table: local_second.clone(),
+			expectedSymbols: vec![
+				Symbol { name: "a".to_string(), scope: SymbolScope::GLOBAL, index: 0 },
+				Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1 },
+				Symbol { name: "e".to_string(), scope: SymbolScope::LOCAL, index: 0 },
+				Symbol { name: "f".to_string(), scope: SymbolScope::LOCAL, index: 1 },
+			]
+		}
+	];
+
+	for test in tests {
+		for (i, symbol) in test.expectedSymbols.iter().enumerate() {
+			let result = match test.table.resolve(&*symbol.name) {
+				Some(s) => s,
+				None => panic!("name '{}' not resolvable", &*symbol.name)
+			};
+
+			assert_eq!(result, symbol);
+		}
 	}
 }
 
@@ -442,13 +539,14 @@ fn test_functions() {
 			expectedConstants: vec![
 				Object::INTEGER(5),
 				Object::INTEGER(10),
-				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
-					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
-					make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
-					make(OpCodeType::ADD, &vec![]).unwrap(),
-					make(OpCodeType::RETV, &vec![]).unwrap(),
-
-				])})
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
 			],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
@@ -460,13 +558,14 @@ fn test_functions() {
 			expectedConstants: vec![
 				Object::INTEGER(5),
 				Object::INTEGER(10),
-				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
-					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
-					make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
-					make(OpCodeType::ADD, &vec![]).unwrap(),
-					make(OpCodeType::RETV, &vec![]).unwrap(),
-
-				])})
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
 			],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
@@ -478,13 +577,14 @@ fn test_functions() {
 			expectedConstants: vec![
 				Object::INTEGER(1),
 				Object::INTEGER(2),
-				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
-					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
-					make(OpCodeType::POP, &vec![]).unwrap(),
-					make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
-					make(OpCodeType::RETV, &vec![]).unwrap(),
-
-				])})
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+						make(OpCodeType::POP, &vec![]).unwrap(),
+						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
 			],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
@@ -494,9 +594,11 @@ fn test_functions() {
 		CompilerTestCase {
 			input: "fn() { }",
 			expectedConstants: vec![
-				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
-					make(OpCodeType::RET, &vec![]).unwrap(),
-				])})
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::RET, &vec![]).unwrap(),
+					])
+				})
 			],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
@@ -515,11 +617,12 @@ fn test_function_calls() {
 			input: "fn() { 24 }();",
 			expectedConstants: vec![
 				Object::INTEGER(24),
-				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
-					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
-					make(OpCodeType::RETV, &vec![]).unwrap(),
-
-				])})
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
 			],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
@@ -531,11 +634,12 @@ fn test_function_calls() {
 			input: "let noArg = fn() { 24 }; noArg();",
 			expectedConstants: vec![
 				Object::INTEGER(24),
-				Object::COMPILED_FUNCTION(CompiledFunction { instructions: merge_instructions(vec![
-					make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
-					make(OpCodeType::RETV, &vec![]).unwrap(),
-
-				])})
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
 			],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
@@ -556,6 +660,8 @@ fn test_compiler_scopes() {
 
 	assert_eq!(compiler.scope_index, 0);
 
+	let symbol_table_global = compiler.symbol_table.clone();
+
 	compiler.emit(OpCodeType::MUL, &vec![]);
 
 	compiler.enter_scope();
@@ -571,9 +677,25 @@ fn test_compiler_scopes() {
 		None => panic!("last_instruction not found in scope index: {}", compiler.scope_index)
 	}
 
+	match &compiler.symbol_table.outer {
+		Some(outer) => {
+			if outer.as_ref() != &symbol_table_global {
+				panic!("compiler did not enclose symbol table");
+			}
+		},
+		None => panic!("compiler did not enclose symbol table"),
+	}
+
 	compiler.leave_scope();
 
 	assert_eq!(compiler.scope_index, 0);
+
+	if compiler.symbol_table != symbol_table_global {
+		panic!("compiler did not restore symbol table");
+	}
+	if let Some(_) = &compiler.symbol_table.outer {
+		panic!("compiler modified global symbol table incorrectly");
+	}
 
 	compiler.emit(OpCodeType::ADD, &vec![]);
 
@@ -622,6 +744,87 @@ fn test_global_let_statements() {
 				make(OpCodeType::GG, &vec![0]).unwrap(),
 				make(OpCodeType::GS, &vec![1]).unwrap(),
 				make(OpCodeType::GG, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
+fn test_statement_let_scopes() {
+	let tests = vec![
+		CompilerTestCase {
+			input: r#"
+			let num = 55;
+			fn() { num }
+			"#,
+			expectedConstants: vec![
+				Object::INTEGER(55),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::GG, &vec![0]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: r#"
+			fn() {
+				let num = 55;
+				num
+			}
+			"#,
+			expectedConstants: vec![
+				Object::INTEGER(55),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+						make(OpCodeType::LS, &vec![0]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: r#"
+			fn() {
+				let a = 55;
+				let b = 77;
+				a + b
+			}
+			"#,
+			expectedConstants: vec![
+				Object::INTEGER(55),
+				Object::INTEGER(77),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+						make(OpCodeType::LS, &vec![0]).unwrap(),
+						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+						make(OpCodeType::LS, &vec![1]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::LG, &vec![1]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					])
+				})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -702,12 +905,12 @@ fn test_constants(expected: &Vec<Object>, actual: &Vec<Object>) -> Result<(), Co
 				if l != r {
 					return Err(CompilerError::WRONG_CONSTANTS_INTEGER_EQUALITY { want: *l, got: *r });
 				}
-			},
+			}
 			(Object::STRING(l), Object::STRING(r)) => {
 				if l != r {
 					return Err(CompilerError::WRONG_CONSTANTS_STRING_EQUALITY { want: l.clone(), got: r.clone() });
 				}
-			},
+			}
 			(Object::COMPILED_FUNCTION(l), Object::COMPILED_FUNCTION(r)) => {
 				if l != r {
 					return Err(CompilerError::WRONG_COMPILED_FUNCTION_EQUALITY { want: l.clone(), got: r.clone() });

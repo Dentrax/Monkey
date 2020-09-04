@@ -5,7 +5,7 @@ use crate::ast::ast;
 use std::fmt::{Formatter};
 use std::fmt;
 use crate::ast::ast::{Node, InfixType, PrefixType, Literal, Expression};
-use crate::compiler::symbol_table::{SymbolTable};
+use crate::compiler::symbol_table::{SymbolTable, SymbolScope};
 
 #[derive(Clone)]
 pub struct CompilationScope {
@@ -161,7 +161,13 @@ impl Compiler {
 				self.compile_expression(&l.value)?;
 
 				let symbol = self.symbol_table.define(&l.name);
-				self.emit(OpCodeType::GS, &vec![symbol.index]);
+
+				let op_scope = match symbol.scope {
+					SymbolScope::GLOBAL => OpCodeType::GS,
+					SymbolScope::LOCAL => OpCodeType::LS,
+				};
+
+				self.emit(op_scope, &vec![symbol.index]);
 			}
 			ast::Statement::RETURN(r) => {
 				self.compile_expression(&r.value)?;
@@ -284,8 +290,14 @@ impl Compiler {
 			}
 			ast::Expression::IDENT(i) => {
 				match self.symbol_table.resolve(i) {
-					Some(symb) => {
-						self.emit(OpCodeType::GG, &vec![symb.index]);
+					Some(symbol) => {
+
+						let op_scope = match symbol.scope {
+							SymbolScope::GLOBAL => OpCodeType::GG,
+							SymbolScope::LOCAL => OpCodeType::LG,
+						};
+
+						self.emit(op_scope, &vec![symbol.index]);
 					}
 					_ => {
 						return Err(CompilerError::UNDEFINED_SYMBOL(i.to_string()));
@@ -431,10 +443,17 @@ impl Compiler {
 
 		self.scopes.push(scope);
 		self.scope_index += 1;
+
+		self.symbol_table = SymbolTable::new_enclosed(self.symbol_table.clone());
 	}
 
 	pub fn leave_scope(&mut self) -> Instructions {
 		self.scope_index -= 1;
+
+		if let Some(s) = &self.symbol_table.outer {
+			self.symbol_table = s.as_ref().clone()
+		}
+
 		self.scopes.pop().unwrap().instructions
 	}
 
