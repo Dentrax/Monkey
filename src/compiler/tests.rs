@@ -631,7 +631,7 @@ fn test_function_calls() {
 			],
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
-				make(OpCodeType::CALL, &vec![]).unwrap(),
+				make(OpCodeType::CALL, &vec![0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -651,7 +651,65 @@ fn test_function_calls() {
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
 				make(OpCodeType::GS, &vec![0]).unwrap(),
 				make(OpCodeType::GG, &vec![0]).unwrap(),
-				make(OpCodeType::CALL, &vec![]).unwrap(),
+				make(OpCodeType::CALL, &vec![0]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: r#"
+			let oneArg = fn(a) { a };
+			oneArg(24);
+			"#,
+			expectedConstants: vec![
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 1,
+				}),
+				Object::INTEGER(24)
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::GG, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CALL, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: r#"
+			let manyArg = fn(a, b, c) { a; b; c };
+			manyArg(24, 25, 26);
+			"#,
+			expectedConstants: vec![
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::POP, &vec![]).unwrap(),
+						make(OpCodeType::LG, &vec![1]).unwrap(),
+						make(OpCodeType::POP, &vec![]).unwrap(),
+						make(OpCodeType::LG, &vec![2]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 3,
+					num_params: 3
+				}),
+				Object::INTEGER(24),
+				Object::INTEGER(25),
+				Object::INTEGER(26)
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::GG, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![3]).unwrap(),
+				make(OpCodeType::CALL, &vec![3]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -799,7 +857,8 @@ fn test_statement_let_scopes() {
 						make(OpCodeType::LG, &vec![0]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
 					]),
-					num_locals: 1
+					num_locals: 1,
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -829,7 +888,8 @@ fn test_statement_let_scopes() {
 						make(OpCodeType::ADD, &vec![]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
 					]),
-					num_locals: 2
+					num_locals: 2,
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -860,12 +920,12 @@ fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
 
 				match test_instructions(&t.expectedInstructions, &bytecode.instructions) {
 					Ok(e) => assert!(true),
-					Err(e) => panic!("Error on test_instructions: {}", e)
+					Err(e) => panic!("Error on test_instructions: {}, for input: {}", e, t.input)
 				}
 
 				match test_constants(&t.expectedConstants, &bytecode.constants) {
 					Ok(e) => assert!(true),
-					Err(e) => panic!("Error on test_constants: {}", e)
+					Err(e) => panic!("Error on test_constants: {}, for input: {}", e, t.input)
 				}
 			}
 			Err(e) => {

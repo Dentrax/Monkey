@@ -527,6 +527,96 @@ fn test_functions_calls_without_bindings() {
 }
 
 #[test]
+fn test_functions_calls_with_args_and_bindings() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let identity = fn(a) { a; };
+			identity(4);
+			"#,
+			expected: Object::INTEGER(4),
+		},
+		VMTestCase {
+			input: r#"
+			let sum = fn(a, b) { a + b; };
+			sum(1, 2);
+			"#,
+			expected: Object::INTEGER(3),
+		},
+		VMTestCase {
+			input: r#"
+			let sum = fn(a, b) {
+				let c = a + b;
+				c;
+			};
+			sum(1, 2);
+			"#,
+			expected: Object::INTEGER(3),
+		},
+		VMTestCase {
+			input: r#"
+			let sum = fn(a, b) {
+				let c = a + b;
+				c;
+			};
+			sum(1, 2) + sum(3, 4);
+			"#,
+			expected: Object::INTEGER(10),
+		},
+		VMTestCase {
+			input: r#"
+			let sum = fn(a, b) {
+				let c = a + b;
+				c;
+			};
+			let outer = fn() {
+				sum(1, 2) + sum(3, 4);
+			};
+			outer();
+			"#,
+			expected: Object::INTEGER(10),
+		},
+		VMTestCase {
+			input: r#"
+			let globalNum = 10;
+			let sum = fn(a, b) {
+				let c = a + b;
+				c + globalNum;
+			};
+			let outer = fn() {
+				sum(1, 2) + sum(3, 4) + globalNum;
+			};
+			outer() + globalNum;
+			"#,
+			expected: Object::INTEGER(50),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
+#[should_panic(expected = "wrong number of arguments: want=0, got=1")]
+fn test_functions_calls_with_wrong_args() {
+	let tests = vec![
+		VMTestCase {
+			input: "fn() { 1; }(1);",
+			expected: OBJ_NULL,
+		},
+		VMTestCase {
+			input: "fn(a) { a; }();",
+			expected: OBJ_NULL,
+		},
+		VMTestCase {
+			input: "fn(a, b) { a + b; }(1);",
+			expected: OBJ_NULL,
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
 fn test_global_let_statements() {
 	let tests = vec![
 		VMTestCase {

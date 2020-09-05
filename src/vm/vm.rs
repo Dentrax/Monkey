@@ -56,7 +56,7 @@ impl<'a> VM<'a> {
 	fn new_frames(instructions: Instructions) -> Vec<Frame> {
 		let mut frames = Vec::with_capacity(FRAMES_SIZE);
 
-		let main_fn = CompiledFunction { instructions, num_locals: 0 };
+		let main_fn = CompiledFunction { instructions, num_locals: 0, num_params: 0 };
 		let main_frame = Frame::new(main_fn, 0);
 
 		frames.push(main_frame);
@@ -183,16 +183,11 @@ impl<'a> VM<'a> {
 					self.push(OBJ_NULL);
 				}
 				OpCodeType::CALL => {
-					let func = match self.stack[self.sp - 1].clone() { //TODO: clone
-						Object::COMPILED_FUNCTION(cf) => cf,
-						_ => panic!("not a compiled function received")
-					};
+					let num_args = self.read_u8_at(ip + 1) as usize;
 
-					let frame = Frame::new(func.clone(), self.sp); //clone
-					let bp = frame.bp;
+					self.current_frame().ip += 1;
 
-					self.push_frame(frame);
-					self.sp = bp + func.num_locals; //check
+					self.call_function(num_args);
 
 					//prevent to increment the frame ip
 					continue;
@@ -220,6 +215,23 @@ impl<'a> VM<'a> {
 	fn read_u8_at(&self, ip: usize) -> u8 {
 		let ins = &self.frames[self.frames_index - 1].cf.instructions;
 		*&ins[ip]
+	}
+
+	fn call_function(&mut self, num_args: usize) {
+		let func = match self.stack[self.sp - 1 - num_args].clone() { //TODO: clone
+			Object::COMPILED_FUNCTION(cf) => cf,
+			_ => panic!("calling non-function")
+		};
+
+		if num_args != func.num_params {
+			panic!("wrong number of arguments: want={}, got={}", func.num_params, num_args);
+		}
+
+		let frame = Frame::new(func.clone(), self.sp - num_args); //clone
+		let bp = frame.bp;
+
+		self.push_frame(frame);
+		self.sp = bp + func.num_locals; //check
 	}
 
 	fn execute_binary_operation(&mut self, op: OpCodeType) { //TODO: return err

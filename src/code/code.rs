@@ -216,7 +216,7 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::CALL => Definition {
 			name: "OpCall",
-			operand_widths: vec![2],
+			operand_widths: vec![1],
 		},
 		OpCodeType::RETV => Definition {
 			name: "OpReturnValue",

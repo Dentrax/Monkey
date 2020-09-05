@@ -46,6 +46,7 @@ impl fmt::Display for Function {
 pub struct CompiledFunction {
 	pub instructions: Instructions,
 	pub num_locals: usize,
+	pub num_params: usize,
 }
 
 impl fmt::Display for CompiledFunction {
@@ -58,7 +59,8 @@ impl Default for CompiledFunction {
 	fn default() -> Self {
 		CompiledFunction {
 			instructions: vec![],
-			num_locals: 0
+			num_locals: 0,
+			num_params: 0
 		}
 	}
 }

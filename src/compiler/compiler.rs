@@ -329,6 +329,10 @@ impl Compiler {
 			ast::Expression::FUNCTION(func) => {
 				self.enter_scope();
 
+				for parameter in &func.parameters {
+					self.symbol_table.define(parameter);
+				}
+
 				self.compile_statement_block(&func.body);
 
 				if self.is_instruction_last_type(OpCodeType::POP) {
@@ -340,8 +344,9 @@ impl Compiler {
 				}
 
 				let num_locals = self.symbol_table.num_definitions;
+				let num_params = func.parameters.len();
 				let instructions = self.leave_scope();
-				let compiled_fn = Object::COMPILED_FUNCTION(CompiledFunction { instructions, num_locals });
+				let compiled_fn = Object::COMPILED_FUNCTION(CompiledFunction { instructions, num_locals, num_params });
 
 				let ops = &vec![self.add_constant(compiled_fn)];
 
@@ -350,7 +355,11 @@ impl Compiler {
 			ast::Expression::CALL(call) => {
 				self.compile_expression(&call.function);
 
-				self.emit(OpCodeType::CALL, &vec![]);
+				for argument in &call.arguments {
+					self.compile_expression(argument)?;
+				}
+
+				self.emit(OpCodeType::CALL, &vec![call.arguments.len()]);
 			}
 			_ => return Err(CompilerError::UNKNOWN_EXPRESSION(expr.clone()))
 		};
