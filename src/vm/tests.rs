@@ -458,6 +458,69 @@ fn test_functions_first_class() {
 			"#,
 			expected: Object::INTEGER(1),
 		},
+		VMTestCase {
+			input: r#"
+			let returnsOneReturner = fn() {
+				let returnsOne = fn() { 1; };
+				returnsOne;
+			};
+			returnsOneReturner()();
+			"#,
+			expected: Object::INTEGER(1),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
+fn test_functions_calls_without_bindings() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let one = fn() { let one = 1; one };
+			one();
+			"#,
+			expected: Object::INTEGER(1),
+		},
+		VMTestCase {
+			input: r#"
+			let oneAndTwo = fn() { let one = 1; let two = 2; one + two; };
+			oneAndTwo();
+			"#,
+			expected: Object::INTEGER(3),
+		},
+		VMTestCase {
+			input: r#"
+			let oneAndTwo = fn() { let one = 1; let two = 2; one + two; };
+			let threeAndFour = fn() { let three = 3; let four = 4; three + four; };
+			oneAndTwo() + threeAndFour();
+			"#,
+			expected: Object::INTEGER(10),
+		},
+		VMTestCase {
+			input: r#"
+			let firstFoobar = fn() { let foobar = 50; foobar; };
+			let secondFoobar = fn() { let foobar = 100; foobar; };
+			firstFoobar() + secondFoobar();
+			"#,
+			expected: Object::INTEGER(150),
+		},
+		VMTestCase {
+			input: r#"
+			let globalSeed = 50;
+			let minusOne = fn() {
+			let num = 1;
+				globalSeed - num;
+			}
+			let minusTwo = fn() {
+				let num = 2;
+				globalSeed - num;
+			}
+			minusOne() + minusTwo();
+			"#,
+			expected: Object::INTEGER(97),
+		},
 	];
 
 	run_vm_tests(tests);

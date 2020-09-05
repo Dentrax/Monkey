@@ -545,7 +545,8 @@ fn test_functions() {
 						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
 						make(OpCodeType::ADD, &vec![]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -564,7 +565,8 @@ fn test_functions() {
 						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
 						make(OpCodeType::ADD, &vec![]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -583,7 +585,8 @@ fn test_functions() {
 						make(OpCodeType::POP, &vec![]).unwrap(),
 						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -597,7 +600,8 @@ fn test_functions() {
 				Object::COMPILED_FUNCTION(CompiledFunction {
 					instructions: merge_instructions(vec![
 						make(OpCodeType::RET, &vec![]).unwrap(),
-					])
+					]),
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -621,7 +625,8 @@ fn test_function_calls() {
 					instructions: merge_instructions(vec![
 						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -638,7 +643,8 @@ fn test_function_calls() {
 					instructions: merge_instructions(vec![
 						make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -766,7 +772,8 @@ fn test_statement_let_scopes() {
 					instructions: merge_instructions(vec![
 						make(OpCodeType::GG, &vec![0]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					..CompiledFunction::default()
 				})
 			],
 			expectedInstructions: vec![
@@ -791,7 +798,8 @@ fn test_statement_let_scopes() {
 						make(OpCodeType::LS, &vec![0]).unwrap(),
 						make(OpCodeType::LG, &vec![0]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					num_locals: 1
 				})
 			],
 			expectedInstructions: vec![
@@ -820,7 +828,8 @@ fn test_statement_let_scopes() {
 						make(OpCodeType::LG, &vec![1]).unwrap(),
 						make(OpCodeType::ADD, &vec![]).unwrap(),
 						make(OpCodeType::RETV, &vec![]).unwrap(),
-					])
+					]),
+					num_locals: 2
 				})
 			],
 			expectedInstructions: vec![

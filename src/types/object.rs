@@ -45,11 +45,21 @@ impl fmt::Display for Function {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompiledFunction {
 	pub instructions: Instructions,
+	pub num_locals: usize,
 }
 
 impl fmt::Display for CompiledFunction {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		write!(f, "<compiled fn()> {{\n{:#?}\n}}", self.instructions)
+		write!(f, "<compiled fn()> {{\n{:#?}\n}}, num_locals: {}", self.instructions, self.num_locals)
+	}
+}
+
+impl Default for CompiledFunction {
+	fn default() -> Self {
+		CompiledFunction {
+			instructions: vec![],
+			num_locals: 0
+		}
 	}
 }
 

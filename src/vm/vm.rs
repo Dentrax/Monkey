@@ -56,8 +56,8 @@ impl<'a> VM<'a> {
 	fn new_frames(instructions: Instructions) -> Vec<Frame> {
 		let mut frames = Vec::with_capacity(FRAMES_SIZE);
 
-		let main_fn = CompiledFunction { instructions };
-		let main_frame = Frame::new(main_fn);
+		let main_fn = CompiledFunction { instructions, num_locals: 0 };
+		let main_frame = Frame::new(main_fn, 0);
 
 		frames.push(main_frame);
 
@@ -137,6 +137,24 @@ impl<'a> VM<'a> {
 
 					self.push(self.globals[global_index].clone());
 				}
+				OpCodeType::LS => {
+					let local_index = self.read_u8_at(ip + 1) as usize;
+					self.current_frame().ip += 1;
+
+					let base_pointer = self.current_frame().bp;
+					let popped = self.pop().clone(); //check
+
+					self.stack[base_pointer + local_index] = popped
+				}
+				OpCodeType::LG => {
+					let local_index = self.read_u8_at(ip + 1) as usize;
+					self.current_frame().ip += 1;
+
+					let base_pointer = self.current_frame().bp;
+					let local = self.stack[base_pointer + local_index].clone(); //clone
+
+					self.push(local); //check
+				}
 				OpCodeType::ARR => {
 					let global_index = read_uint16(&ins[ip + 1..]);
 					self.current_frame().ip += 2;
@@ -165,25 +183,31 @@ impl<'a> VM<'a> {
 					self.push(OBJ_NULL);
 				}
 				OpCodeType::CALL => {
-					let frame = match self.stack[self.sp - 1].clone() {
+					let func = match self.stack[self.sp - 1].clone() { //TODO: clone
 						Object::COMPILED_FUNCTION(cf) => cf,
 						_ => panic!("not a compiled function received")
 					};
-					self.push_frame(Frame::new(frame));
+
+					let frame = Frame::new(func.clone(), self.sp); //clone
+					let bp = frame.bp;
+
+					self.push_frame(frame);
+					self.sp = bp + func.num_locals; //check
+
 					//prevent to increment the frame ip
 					continue;
 				}
 				OpCodeType::RETV => {
 					let returned = self.pop().to_owned();
 
-					self.pop_frame();
-					self.pop();
+					let frame = self.pop_frame();
+					self.sp = frame.bp - 1;
 
 					self.push(returned);
 				}
 				OpCodeType::RET => {
-					self.pop_frame();
-					self.pop();
+					let frame = self.pop_frame();
+					self.sp = frame.bp - 1;
 
 					self.push(OBJ_NULL);
 				}
@@ -193,9 +217,9 @@ impl<'a> VM<'a> {
 		};
 	}
 
-	fn read_op(&self, ip: usize) -> OpCodeType {
-		let ins = &self.frames[self.frames_index].cf.instructions;
-		OpCodeType::from(ins[ip])
+	fn read_u8_at(&self, ip: usize) -> u8 {
+		let ins = &self.frames[self.frames_index - 1].cf.instructions;
+		*&ins[ip]
 	}
 
 	fn execute_binary_operation(&mut self, op: OpCodeType) { //TODO: return err

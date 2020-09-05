@@ -339,8 +339,9 @@ impl Compiler {
 					self.emit(OpCodeType::RET, &vec![]);
 				}
 
+				let num_locals = self.symbol_table.num_definitions;
 				let instructions = self.leave_scope();
-				let compiled_fn = Object::COMPILED_FUNCTION(CompiledFunction { instructions });
+				let compiled_fn = Object::COMPILED_FUNCTION(CompiledFunction { instructions, num_locals });
 
 				let ops = &vec![self.add_constant(compiled_fn)];
 

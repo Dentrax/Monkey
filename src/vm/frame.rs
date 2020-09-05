@@ -5,13 +5,15 @@ use crate::code::code::Instructions;
 pub struct Frame {
 	pub cf: CompiledFunction,
 	pub ip: usize,
+	pub bp: usize, //base pointer (a.k.a frame pointer)
 }
 
 impl Frame {
-	pub fn new(cf: CompiledFunction) -> Self {
+	pub fn new(cf: CompiledFunction, bp: usize) -> Self {
 		Frame {
 			cf,
 			ip: 0,
+			bp
 		}
 	}
 
