@@ -448,6 +448,86 @@ fn test_functions_call_without_return_value() {
 }
 
 #[test]
+fn test_functions_builtin() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"len("")"#,
+			expected: Object::INTEGER(0),
+		},
+		VMTestCase {
+			input: r#"len("four")"#,
+			expected: Object::INTEGER(4),
+		},
+		VMTestCase {
+			input: r#"len("hello world")"#,
+			expected: Object::INTEGER(11),
+		},
+		VMTestCase {
+			input: "len(1)",
+			expected: Object::ERROR(String::from("argument to 'len' not supported, got INTEGER")),
+		},
+		VMTestCase {
+			input: r#"len("one", "two")"#,
+			expected: Object::ERROR(String::from("wrong number of arguments. got=2, want=1")),
+		},
+		VMTestCase {
+			input: "len([1, 2, 3])",
+			expected: Object::INTEGER(3),
+		},
+		VMTestCase {
+			input: "len([])",
+			expected: Object::INTEGER(0),
+		},
+		VMTestCase {
+			input: r#"puts("hello", "world!")"#,
+			expected: OBJ_NULL,
+		},
+		VMTestCase {
+			input: "first([1, 2, 3])",
+			expected: Object::INTEGER(1),
+		},
+		VMTestCase {
+			input: "first([])",
+			expected: OBJ_NULL,
+		},
+		VMTestCase {
+			input: "first(1)",
+			expected: Object::ERROR(String::from("argument to 'first' not supported, got INTEGER")),
+		},
+		VMTestCase {
+			input: "last([1, 2, 3])",
+			expected: Object::INTEGER(3),
+		},
+		VMTestCase {
+			input: "last([])",
+			expected: OBJ_NULL,
+		},
+		VMTestCase {
+			input: "last(1)",
+			expected: Object::ERROR(String::from("argument to 'last' not supported, got INTEGER")),
+		},
+		VMTestCase {
+			input: "rest([1, 2, 3])",
+			expected: Object::ARRAY(Array { elements: vec![Object::INTEGER(2), Object::INTEGER(3)] }),
+		},
+		VMTestCase {
+			input: "rest([])",
+			expected: OBJ_NULL,
+		},
+		VMTestCase {
+			input: "push([], 1)",
+			expected: Object::ARRAY(Array { elements: vec![Object::INTEGER(1)] }),
+		},
+		VMTestCase {
+			input: "push(1, 1)",
+			expected: Object::ERROR(String::from("argument to 'push' not supported, got INTEGER")),
+		}
+	];
+
+	run_vm_tests(tests);
+}
+
+#[test]
 fn test_functions_first_class() {
 	let tests = vec![
 		VMTestCase {
@@ -688,6 +768,18 @@ fn test_expected_object(input: &str, expected: &Object, actual: &Object) {
 		(Object::HASH(l), Object::HASH(r)) => {
 			if l != r {
 				panic!("hash object has wrong value for `{:#?}`. got: {:?}, want: {:?}", input, r, l)
+			}
+		}
+		(Object::ERROR(el), a) => {
+			match a {
+				Object::ERROR(er) => {
+					if el != er {
+						panic!("error object wrong error message for `{}`. got: {}, want: {}", input, er, el)
+					}
+				}
+				_ => {
+					panic!("error object is not an error for `{}`. got: {}, want: ERROR", input, a.get_type())
+				}
 			}
 		}
 		(Object::NULL, a) => {

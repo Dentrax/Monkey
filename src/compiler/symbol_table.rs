@@ -3,7 +3,8 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum SymbolScope {
 	GLOBAL,
-	LOCAL
+	LOCAL,
+	BUILTIN
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -31,9 +32,11 @@ impl SymbolTable {
 	}
 
 	pub fn new_enclosed(outer: SymbolTable) -> Self {
-		let mut s = SymbolTable::new();
-		s.outer = Some(Box::new(outer));
-		return s
+		SymbolTable {
+			outer: Some(Box::new(outer)),
+			store: HashMap::new(),
+			num_definitions: 0
+		}
 	}
 
 	pub fn define(&mut self, name: &str) -> Symbol {
@@ -50,6 +53,18 @@ impl SymbolTable {
 
 		self.store.insert(name.to_string(), symbol.clone()); //FIXME: clone?
 		self.num_definitions += 1;
+
+		symbol
+	}
+
+	pub fn define_builtin(&mut self, index: usize, name: String) -> Symbol {
+		let symbol = Symbol{
+			name: name.clone(),
+			scope: SymbolScope::BUILTIN,
+			index
+		};
+
+		self.store.insert(name, symbol.clone()); //TODO: rc
 
 		symbol
 	}

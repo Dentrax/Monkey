@@ -4,6 +4,7 @@ use crate::eval::eval::*;
 
 use std::{fmt};
 use std::fmt::{Formatter};
+use std::slice::Iter;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Builtin {
@@ -31,6 +32,20 @@ impl fmt::Display for Builtin {
 }
 
 impl Builtin {
+	pub fn iterator() -> Iter<'static, Builtin> {
+		static BUILTINS: [Builtin; 7] =
+			[
+				Builtin::LEN,
+				Builtin::FIRST,
+				Builtin::LAST,
+				Builtin::REST,
+				Builtin::REVERSE,
+				Builtin::PUSH,
+				Builtin::PUTS
+			];
+		BUILTINS.iter()
+	}
+
 	pub fn lookup(builtin: String) -> Option<Self> {
 		match builtin.as_str() {
 			"len" => Some(Builtin::LEN),
@@ -44,15 +59,15 @@ impl Builtin {
 		}
 	}
 
-	pub fn apply(&self, args: Vec<Object>) -> Result<Object, EvalError> {
+	pub fn apply(&self, args: &Vec<Object>) -> Result<Object, EvalError> {
 		match self {
-			Builtin::LEN => builtin_len(&args),
-			Builtin::FIRST => builtin_first(&args),
-			Builtin::LAST => builtin_last(&args),
-			Builtin::REST => builtin_rest(&args),
-			Builtin::REVERSE => builtin_reverse(&args),
-			Builtin::PUSH => builtin_push(&args),
-			Builtin::PUTS => builtin_puts(&args),
+			Builtin::LEN => builtin_len(args),
+			Builtin::FIRST => builtin_first(args),
+			Builtin::LAST => builtin_last(args),
+			Builtin::REST => builtin_rest(args),
+			Builtin::REVERSE => builtin_reverse(args),
+			Builtin::PUSH => builtin_push(args),
+			Builtin::PUTS => builtin_puts(args),
 		}
 	}
 }

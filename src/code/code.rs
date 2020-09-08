@@ -86,6 +86,7 @@ pub enum OpCodeType {
 	RET = 23,
 	LG = 24,
 	LS = 25,
+	BG = 26,
 }
 
 impl From<u8> for OpCodeType {
@@ -117,6 +118,7 @@ impl From<u8> for OpCodeType {
 			23 => OpCodeType::RET,
 			24 => OpCodeType::LG,
 			25 => OpCodeType::LS,
+			26 => OpCodeType::BG,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -232,6 +234,10 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::LS => Definition {
 			name: "OpSetLocal",
+			operand_widths: vec![1],
+		},
+		OpCodeType::BG => Definition {
+			name: "OpGetBuiltin",
 			operand_widths: vec![1],
 		}
 	}

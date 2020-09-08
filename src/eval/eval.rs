@@ -298,7 +298,7 @@ impl Evaluator {
 		}
 
 		if let Some(b) = Builtin::lookup(func.to_string()) {
-			return Ok(b.apply(args)?)
+			return Ok(b.apply(&args)?)
 		}
 
 		Err(EvalError::UNSUPPORTED_OBJECT(func))

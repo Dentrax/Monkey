@@ -5,7 +5,8 @@ use crate::ast::ast;
 use std::fmt::{Formatter};
 use std::fmt;
 use crate::ast::ast::{Node, InfixType, PrefixType, Literal, Expression};
-use crate::compiler::symbol_table::{SymbolTable, SymbolScope};
+use crate::compiler::symbol_table::{SymbolTable, SymbolScope, Symbol};
+use crate::types::builtins::Builtin;
 
 #[derive(Clone)]
 pub struct CompilationScope {
@@ -101,9 +102,15 @@ impl Compiler {
 			prev_instruction: None
 		};
 
+		let mut symbol_table = SymbolTable::new();
+
+		for (i, v) in Builtin::iterator().into_iter().enumerate() {
+			symbol_table.define_builtin(i, v.to_string());
+		}
+
 		Compiler {
 			constants: vec![],
-			symbol_table: SymbolTable::new(),
+			symbol_table,
 			scopes: vec![scope_main],
 			scope_index: 0
 		}
@@ -165,6 +172,7 @@ impl Compiler {
 				let op_scope = match symbol.scope {
 					SymbolScope::GLOBAL => OpCodeType::GS,
 					SymbolScope::LOCAL => OpCodeType::LS,
+					_ => panic!("unexpected builtin handle")
 				};
 
 				self.emit(op_scope, &vec![symbol.index]);
@@ -288,19 +296,13 @@ impl Compiler {
 				let after_consequence_pos = self.current_instructions().len();
 				self.change_operand(jump_pos, after_consequence_pos);
 			}
-			ast::Expression::IDENT(i) => {
-				match self.symbol_table.resolve(i) {
+			ast::Expression::IDENT(name) => {
+				match self.symbol_table.resolve(name) {
 					Some(symbol) => {
-
-						let op_scope = match symbol.scope {
-							SymbolScope::GLOBAL => OpCodeType::GG,
-							SymbolScope::LOCAL => OpCodeType::LG,
-						};
-
-						self.emit(op_scope, &vec![symbol.index]);
+						self.load_symbol(symbol.clone()); //clone
 					}
 					_ => {
-						return Err(CompilerError::UNDEFINED_SYMBOL(i.to_string()));
+						return Err(CompilerError::UNDEFINED_SYMBOL(name.to_string()));
 					}
 				}
 			}
@@ -367,11 +369,21 @@ impl Compiler {
 		Ok(())
 	}
 
-	pub(crate) fn emit(&mut self, op: OpCodeType, operands: &Vec<usize>) -> usize {
+	pub fn emit(&mut self, op: OpCodeType, operands: &Vec<usize>) -> usize {
 		let ins = make(op, operands).unwrap();
 		let pos = self.add_instruction(&ins);
 		self.set_instruction_last(op, pos);
 		return pos;
+	}
+
+	fn load_symbol(&mut self, s: Symbol) {
+		let op = match s.scope {
+			SymbolScope::GLOBAL => OpCodeType::GG,
+			SymbolScope::LOCAL => OpCodeType::LG,
+			SymbolScope::BUILTIN => OpCodeType::BG,
+		};
+
+		self.emit(op, &vec![s.index]);
 	}
 
 	fn set_instruction_last(&mut self, op: OpCodeType, pos: usize) {

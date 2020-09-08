@@ -6,6 +6,7 @@ use crate::types::array::Array;
 use std::collections::HashMap;
 use crate::types::hashable::{Hash, Hashable};
 use crate::vm::frame::Frame;
+use crate::types::builtins::Builtin;
 
 const STACK_SIZE: usize = 2048;
 const GLOBAL_SIZE: usize = 65536;
@@ -86,7 +87,7 @@ impl<'a> VM<'a> {
 			match op {
 				OpCodeType::CONSTANT => {
 					let const_index = read_uint16(&ins[ip + 1..]);
-					self.current_frame().ip = ip + 2;
+					self.current_frame().ip += 2;
 
 					self.push(self.constants[const_index].clone());
 				}
@@ -155,6 +156,16 @@ impl<'a> VM<'a> {
 
 					self.push(local); //check
 				}
+				OpCodeType::BG => {
+					let builtin_index = self.read_u8_at(ip + 1) as usize;
+					self.current_frame().ip += 1;
+
+					if let Some(definition) = Builtin::iterator().nth(builtin_index) {
+						self.push(Object::BUILTIN(definition.clone()));
+					} else {
+						panic!("builtin index overflow");
+					}
+				}
 				OpCodeType::ARR => {
 					let global_index = read_uint16(&ins[ip + 1..]);
 					self.current_frame().ip += 2;
@@ -187,7 +198,7 @@ impl<'a> VM<'a> {
 
 					self.current_frame().ip += 1;
 
-					self.call_function(num_args);
+					self.execute_call(num_args);
 
 					//prevent to increment the frame ip
 					continue;
@@ -208,6 +219,7 @@ impl<'a> VM<'a> {
 				}
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
+
 			self.current_frame().ip += 1;
 		};
 	}
@@ -217,22 +229,76 @@ impl<'a> VM<'a> {
 		*&ins[ip]
 	}
 
-	fn call_function(&mut self, num_args: usize) {
-		let func = match self.stack[self.sp - 1 - num_args].clone() { //TODO: clone
-			Object::COMPILED_FUNCTION(cf) => cf,
-			_ => panic!("calling non-function")
-		};
+	fn execute_call(&mut self, num_args: usize) {
+		match &self.stack[self.sp - num_args - 1].clone() { //avoid stack copy
+			Object::COMPILED_FUNCTION(cf) => {
+				self.call_function(cf, num_args);
+			},
+			Object::BUILTIN(b) => {
+				self.call_builtin(b, num_args);
+			},
+			_ => panic!("calling non-function and non-built-in")
+		}
+	}
 
-		if num_args != func.num_params {
-			panic!("wrong number of arguments: want={}, got={}", func.num_params, num_args);
+	fn call_function(&mut self, cf: &CompiledFunction, num_args: usize) {
+		if num_args != cf.num_params {
+			panic!("wrong number of arguments: want={}, got={}", cf.num_params, num_args);
 		}
 
-		let frame = Frame::new(func.clone(), self.sp - num_args); //clone
+		let frame = Frame::new(cf.clone(), self.sp - num_args); //clone
 		let bp = frame.bp;
 
 		self.push_frame(frame);
-		self.sp = bp + func.num_locals; //check
+		self.sp = bp + cf.num_locals; //check
 	}
+
+	fn call_builtin(&mut self, b: &Builtin, num_args: usize) {
+		let mut args = Vec::with_capacity(num_args);
+		for _ in 0..num_args {
+			let arg = self.pop();
+			args.push((*arg).clone()); //clone
+		}
+
+		args.reverse();
+
+		let _function = self.pop();
+
+		let result = b.apply(&args);
+
+		match result {
+			Ok(result) => {
+				self.push(result);
+			}
+			Err(error) => {
+				self.push(Object::ERROR(error.to_string()));
+			}
+		}
+
+		self.current_frame().ip += 1;
+	}
+
+	// fn call_builtin(&mut self, b: &Builtin, num_args: usize) {
+	// 	println!("{}", "__________________________________________");
+	// 	println!("sp: {}, num_args: {}, b: {}", self.sp, num_args, b.to_string());
+	//
+	// 	let args = &self.stack[self.sp - num_args..self.sp].to_vec();
+	//
+	// 	println!("args: {:?}", args);
+	//
+	// 	let result = b.apply(args);
+	//
+	// 	println!("result: {:?}", result);
+	//
+	// 	self.sp = self.sp - num_args - 1;
+	//
+	// 	println!("sp new: {}", self.sp);
+	//
+	// 	match result {
+	// 		Ok(obj) => self.push(obj),
+	// 		Err(err) => self.push(OBJ_NULL),
+	// 	}
+	// }
 
 	fn execute_binary_operation(&mut self, op: OpCodeType) { //TODO: return err
 		let right = self.pop().to_owned(); //FIXME: cloning
@@ -245,7 +311,7 @@ impl<'a> VM<'a> {
 			(Object::STRING(r), Object::STRING(l)) => {
 				self.execute_binary_operation_string(op, l.to_string(), r.to_string());
 			}
-			_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
+			_ => panic!("wrong object types for op: {:?}. R: {}, L: {}", op, right, left)
 		}
 	}
 
@@ -283,7 +349,7 @@ impl<'a> VM<'a> {
 			(Object::BOOLEAN(r), Object::BOOLEAN(l)) => {
 				self.execute_comparison_boolean(op, *l, *r);
 			}
-			_ => panic!("wrong object types for OpCodeType::ADD. R: {}, L: {}", right, left)
+			_ => panic!("wrong object types for comparison. R: {}, L: {}", right, left)
 		}
 	}
 

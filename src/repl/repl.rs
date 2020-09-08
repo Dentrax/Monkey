@@ -11,6 +11,7 @@ use crate::compiler::compiler::Compiler;
 use crate::vm::vm::VM;
 use crate::compiler::symbol_table::SymbolTable;
 use crate::types::builtins::Builtin::REST;
+use crate::types::builtins::Builtin;
 
 const PROMPT: &str = ">>> ";
 
@@ -22,6 +23,10 @@ pub fn start() {
 	let mut globals = VM::new_globals();
 	//let mut evaluator = Evaluator::new();
 	let mut symbol_table = SymbolTable::new();
+
+	for (i, v) in Builtin::iterator().into_iter().enumerate() {
+		symbol_table.define_builtin(i, v.to_string());
+	}
 
 	loop {
         if write!(&mut stdout, "{}", PROMPT).is_err() { 

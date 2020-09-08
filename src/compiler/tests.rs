@@ -145,6 +145,36 @@ fn test_symbol_table_resolve_local_nested() {
 	}
 }
 
+#[test]
+fn test_symbol_table_resolve_builtins() {
+	let mut global = SymbolTable::new();
+
+	let expected: Vec<Symbol> = vec![
+		Symbol { name: "a".to_string(), scope: SymbolScope::BUILTIN, index: 0 },
+		Symbol { name: "c".to_string(), scope: SymbolScope::BUILTIN, index: 1 },
+		Symbol { name: "e".to_string(), scope: SymbolScope::BUILTIN, index: 2 },
+		Symbol { name: "f".to_string(), scope: SymbolScope::BUILTIN, index: 3 }
+	];
+
+	for sym in &expected {
+		global.define_builtin(sym.index, sym.name.clone());
+	}
+
+	let local_first = SymbolTable::new_enclosed(global.clone());
+	let local_second = SymbolTable::new_enclosed(local_first.clone());
+
+	for table in vec![global, local_first, local_second] {
+		for symbol in &expected {
+			let result = match table.resolve(&symbol.name) {
+				Some(s) => s,
+				None => panic!("name '{}' not resolvable", &*symbol.name)
+			};
+
+			assert_eq!(result, symbol);
+		}
+	}
+}
+
 // COMPILER TESTS
 
 #[test]
@@ -808,6 +838,52 @@ fn test_global_let_statements() {
 				make(OpCodeType::GG, &vec![0]).unwrap(),
 				make(OpCodeType::GS, &vec![1]).unwrap(),
 				make(OpCodeType::GG, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
+fn test_builtins() {
+	let tests = vec![
+		CompilerTestCase {
+			input: r#"
+			len([]);
+			push([], 1);
+			"#,
+			expectedConstants: vec![Object::INTEGER(1)],
+			expectedInstructions: vec![
+				//len
+				make(OpCodeType::BG, &vec![0]).unwrap(),
+				make(OpCodeType::ARR, &vec![0]).unwrap(),
+				make(OpCodeType::CALL, &vec![1]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+				//push
+				make(OpCodeType::BG, &vec![5]).unwrap(),
+				make(OpCodeType::ARR, &vec![0]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CALL, &vec![2]).unwrap(),
+				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: "fn() { len([]) }",
+			expectedConstants: vec![
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::BG, &vec![0]).unwrap(),
+						make(OpCodeType::ARR, &vec![0]).unwrap(),
+						make(OpCodeType::CALL, &vec![1]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					..CompiledFunction::default()
+				})
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
