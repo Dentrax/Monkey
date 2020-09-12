@@ -1,6 +1,6 @@
 [package]
-name = "Monkey"
-version = "0.1.0"
+name = "monkey"
+version = "0.2.0"
 authors = ["Furkan <furkan.turkal@hotmail.com>"]
 edition = "2018"
 keywords = ["interpreter"]
@@ -8,3 +8,7 @@ license = "MIT"
 
 [dependencies]
 byteorder = "1.3.4"
+
+[[bin]]
+name = "benchmark"
+path = "src/benchmark.rs"

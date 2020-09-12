@@ -2,7 +2,7 @@
 
 [![Build](https://travis-ci.org/Dentrax/Monkey.svg?branch=master)](https://travis-ci.org/Dentrax/Monkey)
 
-**Yet another Monkey interpreter implementation in Rust, based on Thorsten Ball's [Writing An Interpreter In Go](https://interpreterbook.com/) book.**
+**Yet another Monkey interpreter & compiler implementation in Rust, based on Thorsten Ball's [Writing An Interpreter In Go](https://interpreterbook.com/) and [Writing A Compiler In Go](https://compilerbook.com/) books.**
 
 ## Features
 * AST
@@ -10,7 +10,11 @@
 * Parser
 * Lexer
 * Evaluator
+* Compiler
+* SymbolTable
+* VirtualMachine
 * Builtin Functions
+* Functions & Closures
 * Read–Eval–Print Loop
 
 ## Usage
@@ -20,18 +24,18 @@
 
 ### 2. Test
 
-```rust
-cargo test --all
+```sh
+$ cargo test --all
 ```
 
 ### 3. Run
 
-```rust
-cargo run
+```sh
+$ cargo run --bin monkey
 ```
 
 ```bash
-Monkey Interpreter v0.1.0
+Monkey Compiler v0.2.0
 >>> "Hello, " + "World!"
 Hello, World!
 >>>
@@ -130,9 +134,19 @@ let getAge = fn(person) { person["name"]; };
 return getAge(people[0]) + getAge(people[1]);
 ```
 
+## Benchmark
+
+```sh
+$ cargo run --release --bin benchmark -- --vm
+$ cargo run --release --bin benchmark -- --eval
+```
+
 ## TODO
-- [ ] Impl Compiler
-- [ ] Impl VM
+- [X] Impl Compiler
+- [X] Impl VM
+- [ ] Add Pipeline with Stages: `fmt`, `check`, `clippy`, `test`, `build`
+- [ ] Optimize overall performance
+- [ ] Fix `clippy` warnings
  
 ## License
 
