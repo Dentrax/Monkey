@@ -1,4 +1,4 @@
-use crate::types::object::{Object, OBJ_NULL, OBJ_TRUE, OBJ_FALSE, CompiledFunction};
+use crate::types::object::{Object, OBJ_NULL, OBJ_TRUE, OBJ_FALSE, CompiledFunction, Closure};
 use crate::code::code::{Instructions, OpCodeType, read_uint16};
 use crate::compiler::compiler::Bytecode;
 use std::borrow::Borrow;
@@ -58,7 +58,8 @@ impl<'a> VM<'a> {
 		let mut frames = Vec::with_capacity(FRAMES_SIZE);
 
 		let main_fn = CompiledFunction { instructions, num_locals: 0, num_params: 0 };
-		let main_frame = Frame::new(main_fn, 0);
+		let main_closure = Closure { cf: main_fn, free: vec![] };
+		let main_frame = Frame::new(main_closure, 0);
 
 		frames.push(main_frame);
 
@@ -190,9 +191,6 @@ impl<'a> VM<'a> {
 
 					self.execute_expression_index(left, index)
 				}
-				OpCodeType::NULL => {
-					self.push(OBJ_NULL);
-				}
 				OpCodeType::CALL => {
 					let num_args = self.read_u8_at(ip + 1) as usize;
 
@@ -202,6 +200,23 @@ impl<'a> VM<'a> {
 
 					//prevent to increment the frame ip
 					continue;
+				}
+				OpCodeType::CL => {
+					let const_index = read_uint16(&ins[ip + 1..]);
+					let num_free = self.read_u8_at(ip + 3) as usize;
+
+					self.current_frame().ip += 3;
+
+					self.push_closure(const_index, num_free);
+				}
+				OpCodeType::FREE => {
+					let free_index = self.read_u8_at(ip + 1) as usize;
+
+					self.current_frame().ip += 1;
+
+					let closure = self.current_frame().cl.free[free_index].clone();
+
+					self.push(closure);
 				}
 				OpCodeType::RETV => {
 					let returned = self.pop().to_owned();
@@ -217,6 +232,9 @@ impl<'a> VM<'a> {
 
 					self.push(OBJ_NULL);
 				}
+				OpCodeType::NULL => {
+					self.push(OBJ_NULL);
+				}
 				_ => panic!("unexpected OpCodeType: {:?}", op)
 			}
 
@@ -225,32 +243,34 @@ impl<'a> VM<'a> {
 	}
 
 	fn read_u8_at(&self, ip: usize) -> u8 {
-		let ins = &self.frames[self.frames_index - 1].cf.instructions;
+		let ins = &self.frames[self.frames_index - 1].cl.cf.instructions;
 		*&ins[ip]
 	}
 
 	fn execute_call(&mut self, num_args: usize) {
 		match &self.stack[self.sp - num_args - 1].clone() { //avoid stack copy
-			Object::COMPILED_FUNCTION(cf) => {
-				self.call_function(cf, num_args);
+			Object::CLOSURE(cl) => {
+				self.call_closure(cl, num_args);
 			},
 			Object::BUILTIN(b) => {
 				self.call_builtin(b, num_args);
 			},
-			_ => panic!("calling non-function and non-built-in")
+			_ => panic!("calling non-closure and non-built-in")
 		}
 	}
 
-	fn call_function(&mut self, cf: &CompiledFunction, num_args: usize) {
-		if num_args != cf.num_params {
-			panic!("wrong number of arguments: want={}, got={}", cf.num_params, num_args);
+	fn call_closure(&mut self, cl: &Closure, num_args: usize) {
+		if num_args != cl.cf.num_params {
+			panic!("wrong number of arguments: want={}, got={}", cl.cf.num_params, num_args);
 		}
 
-		let frame = Frame::new(cf.clone(), self.sp - num_args); //clone
-		let bp = frame.bp;
+		let num_locals = cl.cf.num_locals as usize;
+		let bp = self.sp - num_args;
+
+		let frame = Frame::new(cl.clone(), bp); //clone
 
 		self.push_frame(frame);
-		self.sp = bp + cf.num_locals; //check
+		self.sp = bp + num_locals; //check
 	}
 
 	fn call_builtin(&mut self, b: &Builtin, num_args: usize) {
@@ -277,28 +297,6 @@ impl<'a> VM<'a> {
 
 		self.current_frame().ip += 1;
 	}
-
-	// fn call_builtin(&mut self, b: &Builtin, num_args: usize) {
-	// 	println!("{}", "__________________________________________");
-	// 	println!("sp: {}, num_args: {}, b: {}", self.sp, num_args, b.to_string());
-	//
-	// 	let args = &self.stack[self.sp - num_args..self.sp].to_vec();
-	//
-	// 	println!("args: {:?}", args);
-	//
-	// 	let result = b.apply(args);
-	//
-	// 	println!("result: {:?}", result);
-	//
-	// 	self.sp = self.sp - num_args - 1;
-	//
-	// 	println!("sp new: {}", self.sp);
-	//
-	// 	match result {
-	// 		Ok(obj) => self.push(obj),
-	// 		Err(err) => self.push(OBJ_NULL),
-	// 	}
-	// }
 
 	fn execute_binary_operation(&mut self, op: OpCodeType) { //TODO: return err
 		let right = self.pop().to_owned(); //FIXME: cloning
@@ -491,5 +489,24 @@ impl<'a> VM<'a> {
 	fn pop_frame(&mut self) -> Frame {
 		self.frames_index -= 1;
 		self.frames.pop().expect("empty frames")
+	}
+
+	fn push_closure(&mut self, const_index: usize, num_free: usize) {
+		let constant = &self.constants[const_index];
+
+		match constant {
+			Object::COMPILED_FUNCTION(cf) => {
+				let mut free = Vec::with_capacity(num_free);
+
+				for i in 0..num_free {
+					free.push(self.stack[self.sp - num_free + i].clone())
+				}
+
+				self.sp = self.sp - num_free;
+
+				self.push(Object::CLOSURE(Closure{ cf: cf.clone(), free }))
+			},
+			_ => panic!("not a function: {}", constant.get_type())
+		};
 	}
 }

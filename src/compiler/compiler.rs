@@ -1,5 +1,5 @@
 use crate::types::object::{Object, OBJ_NULL, CompiledFunction};
-use crate::code::code::{Instructions, OpCodeType, make};
+use crate::code::code::{Instructions, OpCodeType, make, IInstructions};
 use std::error::Error;
 use crate::ast::ast;
 use std::fmt::{Formatter};
@@ -65,7 +65,7 @@ impl fmt::Display for CompilerError {
 				write!(f, "wrong constants equality (string): got: {} want: {}", got, want)
 			}
 			CompilerError::WRONG_COMPILED_FUNCTION_EQUALITY { want, got } => {
-				write!(f, "wrong compiled function (fn): got: {} want: {}", got, want)
+				write!(f, "wrong compiled function (fn): got: {} want: {} instructions got: {} want: {}", got, want, got.instructions.string(), want.instructions.string())
 			}
 			CompilerError::WRONG_INSTRUCTION_AT { at, want, got } => {
 				write!(f, "wrong instruction: at: {}\ngot:\n{:#?}\nwant:\n{:#?}", at, got, want)
@@ -299,7 +299,7 @@ impl Compiler {
 			ast::Expression::IDENT(name) => {
 				match self.symbol_table.resolve(name) {
 					Some(symbol) => {
-						self.load_symbol(symbol.clone()); //clone
+						self.load_symbol(&symbol); //clone
 					}
 					_ => {
 						return Err(CompilerError::UNDEFINED_SYMBOL(name.to_string()));
@@ -345,14 +345,22 @@ impl Compiler {
 					self.emit(OpCodeType::RET, &vec![]);
 				}
 
+				let free_symbols = self.symbol_table.free_symbols.clone();
 				let num_locals = self.symbol_table.num_definitions;
 				let num_params = func.parameters.len();
 				let instructions = self.leave_scope();
+
+				for s in &free_symbols {
+					self.load_symbol(s);
+				}
+
 				let compiled_fn = Object::COMPILED_FUNCTION(CompiledFunction { instructions, num_locals, num_params });
 
-				let ops = &vec![self.add_constant(compiled_fn)];
+				let fn_index = self.add_constant(compiled_fn);
 
-				self.emit(OpCodeType::CONSTANT, ops);
+				let ops = &vec![fn_index, free_symbols.len()];
+
+				self.emit(OpCodeType::CL, ops);
 			}
 			ast::Expression::CALL(call) => {
 				self.compile_expression(&call.function);
@@ -376,11 +384,12 @@ impl Compiler {
 		return pos;
 	}
 
-	fn load_symbol(&mut self, s: Symbol) {
-		let op = match s.scope {
+	fn load_symbol(&mut self, s: &Symbol) {
+		let op = match &s.scope {
 			SymbolScope::GLOBAL => OpCodeType::GG,
 			SymbolScope::LOCAL => OpCodeType::LG,
 			SymbolScope::BUILTIN => OpCodeType::BG,
+			SymbolScope::FREE => OpCodeType::FREE,
 		};
 
 		self.emit(op, &vec![s.index]);

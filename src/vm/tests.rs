@@ -716,6 +716,86 @@ fn test_global_let_statements() {
 	run_vm_tests(tests);
 }
 
+#[test]
+fn test_closures() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let newClosure = fn(a) {
+				fn() { a; };
+			};
+			let closure = newClosure(99);
+			closure();
+			"#,
+			expected: Object::INTEGER(99),
+		},
+		VMTestCase {
+			input: r#"
+			let newAdder = fn(a, b) {
+				fn(c) { a + b + c };
+			};
+			let adder = newAdder(1, 2);
+			adder(8);
+			"#,
+			expected: Object::INTEGER(11),
+		},
+		VMTestCase {
+			input: r#"
+			let newAdder = fn(a, b) {
+				let c = a + b;
+				fn(d) { c + d };
+			};
+			let adder = newAdder(1, 2);
+			adder(8);
+			"#,
+			expected: Object::INTEGER(11),
+		},
+		VMTestCase {
+			input: r#"
+			let newAdderOuter = fn(a, b) {
+				let c = a + b;
+				fn(d) {
+					let e = d + c;
+					fn(f) { e + f; };
+				};
+			};
+			let newAdderInner = newAdderOuter(1, 2)
+			let adder = newAdderInner(3);
+			adder(8);
+			"#,
+			expected: Object::INTEGER(14),
+		},
+		VMTestCase {
+			input: r#"
+			let a = 1;
+			let newAdderOuter = fn(b) {
+				fn(c) {
+					fn(d) { a + b + c + d };
+				};
+			};
+			let newAdderInner = newAdderOuter(2)
+			let adder = newAdderInner(3);
+			adder(8);
+			"#,
+			expected: Object::INTEGER(14),
+		},
+		VMTestCase {
+			input: r#"
+			let newClosure = fn(a, b) {
+				let one = fn() { a; };
+				let two = fn() { b; };
+				fn() { one() + two(); };
+			};
+			let closure = newClosure(9, 90);
+			closure();
+			"#,
+			expected: Object::INTEGER(99),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
 fn run_vm_tests(tests: Vec<VMTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();

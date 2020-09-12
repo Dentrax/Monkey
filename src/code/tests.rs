@@ -29,6 +29,12 @@ fn test_make() {
 			expected: vec![OpCodeType::LG as u8, 0xFF],
 			expectedErr: None,
 		},
+		Test {
+			op: OpCodeType::CL,
+			operands: vec![65534, 255],
+			expected: vec![OpCodeType::CL as u8, 0xFF, 0xFE, 0xFF],
+			expectedErr: None,
+		},
 	];
 
 	for test in tests {
@@ -58,6 +64,11 @@ fn test_read_operands() {
 			operands: vec![255],
 			bytesRead: 1
 		},
+		Test {
+			op: OpCodeType::CL,
+			operands: vec![65535, 255],
+			bytesRead: 3
+		},
 	];
 
 	for test in tests {
@@ -85,6 +96,16 @@ fn test_string() {
 				make(OpCodeType::CONSTANT, &vec![65535]).unwrap(),
 			],
 			expected: "0000 OpAdd\n0001 OpGetLocal 1\n0003 OpConstant 2\n0006 OpConstant 65535\n",
+		},
+		Test {
+			instructions: vec![
+				make(OpCodeType::ADD, &vec![]).unwrap(),
+				make(OpCodeType::LG, &vec![1]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CONSTANT, &vec![65535]).unwrap(),
+				make(OpCodeType::CL, &vec![65535, 255]).unwrap(),
+			],
+			expected: "0000 OpAdd\n0001 OpGetLocal 1\n0003 OpConstant 2\n0006 OpConstant 65535\n0009 OpClosure 65535 255\n",
 		},
 	];
 

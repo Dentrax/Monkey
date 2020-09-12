@@ -10,9 +10,11 @@ use std::fmt::{Formatter};
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::code::code::Instructions;
+use std::borrow::BorrowMut;
 
 pub const STR_FUNCTION: &'static str = "FUNCTION";
 pub const STR_COMPILED_FUNCTION: &'static str = "COMPILED_FUNCTION";
+pub const STR_CLOSURE: &'static str = "CLOSURE";
 pub const STR_BUILTIN: &'static str = "BUILTIN";
 pub const STR_ARRAY: &'static str = "ARRAY";
 pub const STR_HASH: &'static str = "HASH";
@@ -51,7 +53,7 @@ pub struct CompiledFunction {
 
 impl fmt::Display for CompiledFunction {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		write!(f, "<compiled fn()> {{\n{:#?}\n}}, num_locals: {}", self.instructions, self.num_locals)
+		write!(f, "<compiled fn()> {{\n{:#?}\n}}, num_locals: {}, num_params: {}", self.instructions, self.num_locals, self.num_params)
 	}
 }
 
@@ -65,10 +67,23 @@ impl Default for CompiledFunction {
 	}
 }
 
+impl fmt::Display for Closure {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "<closure> cf: {{\n{:#?}\n}}, free: {:?}", self.cf, self.free)
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Closure {
+	pub cf: CompiledFunction,
+	pub free: Vec<Object>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
 	FUNCTION(Function),
 	COMPILED_FUNCTION(CompiledFunction),
+	CLOSURE(Closure),
 	BUILTIN(Builtin),
 	ARRAY(Array),
 	HASH(Hash),
@@ -87,6 +102,10 @@ impl Object {
 
 	pub fn is_compiled_function(&self) -> bool {
 		self.get_type() == STR_COMPILED_FUNCTION
+	}
+
+	pub fn is_closure(&self) -> bool {
+		self.get_type() == STR_CLOSURE
 	}
 
 	pub fn is_builtin(&self) -> bool {
@@ -129,6 +148,7 @@ impl Object {
 		match self {
 			Object::FUNCTION(_) => STR_FUNCTION,
 			Object::COMPILED_FUNCTION(_) => STR_COMPILED_FUNCTION,
+			Object::CLOSURE(_) => STR_CLOSURE,
 			Object::BUILTIN(_) => STR_BUILTIN,
 			Object::ARRAY(_) => STR_ARRAY,
 			Object::HASH(_) => STR_HASH,
@@ -155,6 +175,7 @@ impl fmt::Display for Object {
 		match self {
 			Object::FUNCTION(func) => func.fmt(f),
 			Object::COMPILED_FUNCTION(func) => func.fmt(f),
+			Object::CLOSURE(func) => func.fmt(f),
 			Object::BUILTIN(b) => b.fmt(f),
 			Object::ARRAY(a) => a.fmt(f),
 			Object::HASH(h) => h.fmt(f),

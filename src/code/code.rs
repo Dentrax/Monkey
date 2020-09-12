@@ -38,6 +38,7 @@ impl IInstructions for Instructions {
 		match def.operand_widths.len() {
 			0 => format!("{}", def.name),
 			1 => format!("{} {}", def.name, operands[0]),
+			2 => format!("{} {} {}", def.name, operands[0], operands[1]),
 			_ => panic!("unexpected operand_widths len: {}", def.operand_widths.len())
 		}
 	}
@@ -87,6 +88,8 @@ pub enum OpCodeType {
 	LG = 24,
 	LS = 25,
 	BG = 26,
+	CL = 27,
+	FREE = 28,
 }
 
 impl From<u8> for OpCodeType {
@@ -119,6 +122,8 @@ impl From<u8> for OpCodeType {
 			24 => OpCodeType::LG,
 			25 => OpCodeType::LS,
 			26 => OpCodeType::BG,
+			27 => OpCodeType::CL,
+			28 => OpCodeType::FREE,
 			_ => panic!("unhandled u8 to OpCodeType conversion: {}", v),
 		}
 	}
@@ -238,6 +243,14 @@ pub fn lookup<'a>(op: OpCodeType) -> Definition<'a> {
 		},
 		OpCodeType::BG => Definition {
 			name: "OpGetBuiltin",
+			operand_widths: vec![1],
+		},
+		OpCodeType::CL => Definition {
+			name: "OpClosure",
+			operand_widths: vec![2, 1],
+		},
+		OpCodeType::FREE => Definition {
+			name: "OpFree",
 			operand_widths: vec![1],
 		}
 	}

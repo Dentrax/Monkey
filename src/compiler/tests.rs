@@ -19,6 +19,7 @@ struct CompilerTestCase<'a> {
 struct SymbolTableTestCase {
 	table: SymbolTable,
 	expectedSymbols: Vec<Symbol>,
+	expectedFreeSymbols: Vec<Symbol>,
 }
 
 // SYMBOL-TABLE TESTS
@@ -71,7 +72,7 @@ fn test_symbol_table_resolve() {
 	for (s, sym) in expected {
 		let result = global.resolve(&*sym.name);
 
-		assert_eq!(result.unwrap(), &sym);
+		assert_eq!(result.unwrap(), sym);
 	}
 }
 
@@ -94,7 +95,7 @@ fn test_symbol_table_resolve_local() {
 	for (s, sym) in expected {
 		let result = local.resolve(&*sym.name);
 
-		assert_eq!(result.unwrap(), &sym);
+		assert_eq!(result.unwrap(), sym);
 	}
 }
 
@@ -120,7 +121,8 @@ fn test_symbol_table_resolve_local_nested() {
 				Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1 },
 				Symbol { name: "c".to_string(), scope: SymbolScope::LOCAL, index: 0 },
 				Symbol { name: "d".to_string(), scope: SymbolScope::LOCAL, index: 1 },
-			]
+			],
+			expectedFreeSymbols: vec![]
 		},
 		SymbolTableTestCase {
 			table: local_second.clone(),
@@ -129,18 +131,19 @@ fn test_symbol_table_resolve_local_nested() {
 				Symbol { name: "b".to_string(), scope: SymbolScope::GLOBAL, index: 1 },
 				Symbol { name: "e".to_string(), scope: SymbolScope::LOCAL, index: 0 },
 				Symbol { name: "f".to_string(), scope: SymbolScope::LOCAL, index: 1 },
-			]
+			],
+			expectedFreeSymbols: vec![]
 		}
 	];
 
-	for test in tests {
+	for mut test in tests {
 		for (i, symbol) in test.expectedSymbols.iter().enumerate() {
 			let result = match test.table.resolve(&*symbol.name) {
 				Some(s) => s,
 				None => panic!("name '{}' not resolvable", &*symbol.name)
 			};
 
-			assert_eq!(result, symbol);
+			assert_eq!(result, *symbol);
 		}
 	}
 }
@@ -163,14 +166,112 @@ fn test_symbol_table_resolve_builtins() {
 	let local_first = SymbolTable::new_enclosed(global.clone());
 	let local_second = SymbolTable::new_enclosed(local_first.clone());
 
-	for table in vec![global, local_first, local_second] {
+	for mut table in vec![global, local_first, local_second] {
 		for symbol in &expected {
 			let result = match table.resolve(&symbol.name) {
 				Some(s) => s,
 				None => panic!("name '{}' not resolvable", &*symbol.name)
 			};
 
-			assert_eq!(result, symbol);
+			assert_eq!(result, *symbol);
+		}
+	}
+}
+
+#[test]
+fn test_symbol_table_resolve_free() {
+	let mut global = SymbolTable::new();
+	global.define("a");
+	global.define("b");
+
+	let mut local_first = SymbolTable::new_enclosed(global.clone());
+	local_first.define("c");
+	local_first.define("d");
+
+	let mut local_second = SymbolTable::new_enclosed(local_first.clone());
+	local_second.define("e");
+	local_second.define("f");
+
+	let tests = vec![
+		SymbolTableTestCase {
+			table: local_first.clone(),
+			expectedSymbols: vec![
+				Symbol::new("a", SymbolScope::GLOBAL, 0),
+				Symbol::new("b", SymbolScope::GLOBAL, 1),
+				Symbol::new("c", SymbolScope::LOCAL, 0),
+				Symbol::new("d", SymbolScope::LOCAL, 1),
+			],
+			expectedFreeSymbols: vec![]
+		},
+		SymbolTableTestCase {
+			table: local_second.clone(),
+			expectedSymbols: vec![
+				Symbol::new("a", SymbolScope::GLOBAL, 0),
+				Symbol::new("b", SymbolScope::GLOBAL, 1),
+				Symbol::new("c", SymbolScope::FREE, 0),
+				Symbol::new("d", SymbolScope::FREE, 1),
+				Symbol::new("e", SymbolScope::LOCAL, 0),
+				Symbol::new("f", SymbolScope::LOCAL, 1),
+			],
+			expectedFreeSymbols: vec![
+				Symbol::new("c", SymbolScope::LOCAL, 0),
+				Symbol::new("d", SymbolScope::LOCAL, 1),
+			]
+		}
+	];
+
+	for mut test in tests {
+		for (i, symbol) in test.expectedSymbols.iter().enumerate() {
+			let result = match test.table.resolve(&*symbol.name) {
+				Some(s) => s,
+				None => panic!("name '{}' not resolvable", &*symbol.name)
+			};
+
+			assert_eq!(result, *symbol);
+		}
+
+		assert_eq!(test.table.free_symbols.len(), test.expectedFreeSymbols.len());
+
+		for (i, sym) in test.expectedFreeSymbols.iter().enumerate() {
+			assert_eq!(&test.table.free_symbols[i], sym);
+		}
+	}
+}
+
+#[test]
+fn test_symbol_table_unresolve_free() {
+	let mut global = SymbolTable::new();
+	global.define("a");
+
+	let mut local_first = SymbolTable::new_enclosed(global);
+	local_first.define("c");
+
+	let mut local_second = SymbolTable::new_enclosed(local_first);
+	local_second.define("e");
+	local_second.define("f");
+
+	let expected: Vec<Symbol> = vec![
+		Symbol::new("a", SymbolScope::GLOBAL, 0),
+		Symbol::new("c", SymbolScope::FREE, 0),
+		Symbol::new("e", SymbolScope::LOCAL, 0),
+		Symbol::new("f", SymbolScope::LOCAL, 1),
+	];
+
+	for sym in expected {
+		match local_second.resolve(&*sym.name) {
+			Some(s) => assert_eq!(sym, s),
+			None => panic!("name '{}' not resolvable", &*sym.name)
+		};
+	}
+
+	let unexpected: Vec<&str> = vec![
+		"b",
+		"d"
+	];
+
+	for name in unexpected {
+		if let Some(_) = local_second.resolve(&name) {
+			panic!("name {} resolved, but was expected not to", name)
 		}
 	}
 }
@@ -580,7 +681,7 @@ fn test_functions() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CL, &vec![2, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -600,7 +701,7 @@ fn test_functions() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CL, &vec![2, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -620,7 +721,7 @@ fn test_functions() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CL, &vec![2, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -635,7 +736,7 @@ fn test_functions() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CL, &vec![0, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -660,7 +761,7 @@ fn test_function_calls() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CL, &vec![1, 0]).unwrap(),
 				make(OpCodeType::CALL, &vec![0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
@@ -678,7 +779,7 @@ fn test_function_calls() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CL, &vec![1, 0]).unwrap(),
 				make(OpCodeType::GS, &vec![0]).unwrap(),
 				make(OpCodeType::GG, &vec![0]).unwrap(),
 				make(OpCodeType::CALL, &vec![0]).unwrap(),
@@ -702,7 +803,7 @@ fn test_function_calls() {
 				Object::INTEGER(24)
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CL, &vec![0, 0]).unwrap(),
 				make(OpCodeType::GS, &vec![0]).unwrap(),
 				make(OpCodeType::GG, &vec![0]).unwrap(),
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
@@ -733,7 +834,7 @@ fn test_function_calls() {
 				Object::INTEGER(26)
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CL, &vec![0, 0]).unwrap(),
 				make(OpCodeType::GS, &vec![0]).unwrap(),
 				make(OpCodeType::GG, &vec![0]).unwrap(),
 				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
@@ -883,7 +984,7 @@ fn test_builtins() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::CL, &vec![0, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -913,7 +1014,7 @@ fn test_statement_let_scopes() {
 			expectedInstructions: vec![
 				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
 				make(OpCodeType::GS, &vec![0]).unwrap(),
-				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CL, &vec![1, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -938,7 +1039,7 @@ fn test_statement_let_scopes() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+				make(OpCodeType::CL, &vec![1, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
 			],
 		},
@@ -969,8 +1070,164 @@ fn test_statement_let_scopes() {
 				})
 			],
 			expectedInstructions: vec![
-				make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+				make(OpCodeType::CL, &vec![2, 0]).unwrap(),
 				make(OpCodeType::POP, &vec![]).unwrap(),
+			],
+		},
+	];
+
+	run_compiler_tests(tests);
+}
+
+#[test]
+fn test_closures() {
+	let tests = vec![
+		CompilerTestCase {
+			input: r#"
+			fn(a) {
+				fn(b) {
+					a + b
+				}
+			}
+			"#,
+			expectedConstants: vec![
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::FREE, &vec![0]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 1
+				}),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::CL, &vec![0, 1]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 1
+				}),
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CL, &vec![1, 0]).unwrap(),
+				make(OpCodeType::POP, &vec![0]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: r#"
+			fn(a) {
+				fn(b) {
+					fn(c) {
+						a + b + c
+					}
+				}
+			}
+			"#,
+			expectedConstants: vec![
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::FREE, &vec![0]).unwrap(),
+						make(OpCodeType::FREE, &vec![1]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 1
+				}),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::FREE, &vec![0]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::CL, &vec![0, 2]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 1
+				}),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::CL, &vec![1, 1]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 1
+				}),
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CL, &vec![2, 0]).unwrap(),
+				make(OpCodeType::POP, &vec![0]).unwrap(),
+			],
+		},
+		CompilerTestCase {
+			input: r#"
+			let global = 55;
+			fn() {
+				let a = 66;
+				fn() {
+					let b = 77;
+					fn() {
+						let c = 88;
+						global + a + b + c;
+					}
+				}
+			}
+			"#,
+			expectedConstants: vec![
+				Object::INTEGER(55),
+				Object::INTEGER(66),
+				Object::INTEGER(77),
+				Object::INTEGER(88),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![3]).unwrap(),
+						make(OpCodeType::LS, &vec![0]).unwrap(),
+						make(OpCodeType::GG, &vec![0]).unwrap(),
+						make(OpCodeType::FREE, &vec![0]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::FREE, &vec![1]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::ADD, &vec![]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 0
+				}),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![2]).unwrap(),
+						make(OpCodeType::LS, &vec![0]).unwrap(),
+						make(OpCodeType::FREE, &vec![0]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::CL, &vec![4, 2]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 0
+				}),
+				Object::COMPILED_FUNCTION(CompiledFunction {
+					instructions: merge_instructions(vec![
+						make(OpCodeType::CONSTANT, &vec![1]).unwrap(),
+						make(OpCodeType::LS, &vec![0]).unwrap(),
+						make(OpCodeType::LG, &vec![0]).unwrap(),
+						make(OpCodeType::CL, &vec![5, 1]).unwrap(),
+						make(OpCodeType::RETV, &vec![]).unwrap(),
+					]),
+					num_locals: 1,
+					num_params: 0
+				}),
+			],
+			expectedInstructions: vec![
+				make(OpCodeType::CONSTANT, &vec![0]).unwrap(),
+				make(OpCodeType::GS, &vec![0]).unwrap(),
+				make(OpCodeType::CL, &vec![6, 0]).unwrap(),
+				make(OpCodeType::POP, &vec![0]).unwrap(),
 			],
 		},
 	];
