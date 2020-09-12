@@ -796,6 +796,31 @@ fn test_closures() {
 	run_vm_tests(tests);
 }
 
+#[test]
+fn test_recursive_fibonacci() {
+	let tests = vec![
+		VMTestCase {
+			input: r#"
+			let fibonacci = fn(x) {
+				if (x == 0) {
+					return 0;
+				} else {
+					if (x == 1) {
+						return 1;
+					} else {
+						fibonacci(x - 1) + fibonacci(x - 2);
+					}
+				}
+			};
+			fibonacci(15);
+			"#,
+			expected: Object::INTEGER(610),
+		},
+	];
+
+	run_vm_tests(tests);
+}
+
 fn run_vm_tests(tests: Vec<VMTestCase>) {
 	for t in tests {
 		let (program, errors) = Parser::new(Lexer::new(t.input.to_owned())).parse();

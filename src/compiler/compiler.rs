@@ -165,9 +165,9 @@ impl Compiler {
 				self.compile_statement_block(b)?;
 			}
 			ast::Statement::LET(l) => {
-				self.compile_expression(&l.value)?;
-
 				let symbol = self.symbol_table.define(&l.name);
+
+				self.compile_expression(&l.value)?;
 
 				let op_scope = match symbol.scope {
 					SymbolScope::GLOBAL => OpCodeType::GS,
